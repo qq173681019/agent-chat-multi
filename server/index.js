@@ -49,6 +49,47 @@ const server = http.createServer((req, res) => {
     }
     return;
   }
+  
+  // 获取待处理的 Agent 消息（轮询用）
+  if (url.pathname === '/api/poll' && req.method === 'GET') {
+    const since = parseInt(url.searchParams.get('since') || '0');
+    const pending = messages.filter(m => m.id > since && m.role !== 'system');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ messages: pending, lastId: msgId }));
+    return;
+  }
+
+  // Agent 通过 API 发送回复
+  if (url.pathname === '/api/reply' && req.method === 'POST') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      try {
+        const data = JSON.parse(body);
+        msgId++;
+        const reply = { id: msgId, from: data.from || '小呆', fromId: 'openclaw', role: data.role || 'agent-a', content: data.content, time: Date.now() };
+        messages.push(reply);
+        broadcast({ type: 'message', ...reply });
+        
+        // 如果有另一个 Agent 在线，也通知它
+        const otherRole = reply.role === 'agent-a' ? 'agent-b' : 'agent-a';
+        const otherAgent = agents[otherRole];
+        if (otherAgent && otherAgent.ws && otherAgent.ws.readyState === WebSocket.OPEN) {
+          setTimeout(() => {
+            otherAgent.ws.send(JSON.stringify({ type: 'agent_query', message: reply, agent_role: otherRole }));
+          }, 2000);
+        }
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, id: msgId }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
   // 获取消息
   if (url.pathname === '/api/messages') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
