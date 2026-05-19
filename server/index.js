@@ -209,6 +209,19 @@ wss.on('connection', (ws) => {
           const reply = { id: msgId, from: currentUser.name, fromId: currentUser.id, role: currentUser.role, content: data.content, replyTo: data.replyTo || null, time: Date.now() };
           messages.push(reply);
           broadcast({ type: 'message', ...reply });
+          // 通知另一个 Agent（AI 对 AI 对话）
+          const otherRole = currentUser.role === 'agent-a' ? 'agent-b' : 'agent-a';
+          const otherAgent = agents[otherRole];
+          if (otherAgent && otherAgent.ws && otherAgent.ws.readyState === WebSocket.OPEN) {
+            // 延迟2秒，避免两个 AI 无限互聊
+            setTimeout(() => {
+              otherAgent.ws.send(JSON.stringify({
+                type: 'agent_query',
+                message: reply,
+                agent_role: otherRole
+              }));
+            }, 2000);
+          }
           break;
       }
     } catch (e) { console.error('消息解析错误:', e.message); }

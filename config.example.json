@@ -1,5 +1,5 @@
 {
-  "botName": "顾小狼的小胡子",
+  "botName": "你的机器人名字",
   "botRole": "agent-a",
   "serverUrl": "",
   "apiKey": "在此填入你的API Key",
@@ -7,7 +7,7 @@
   "model": "glm-4-flash",
   "useProxy": false,
   "proxy": "http://127.0.0.1:7897",
-  "systemPrompt": "你是{botName}，一个聪明、有点幽默的AI助手。你在聊天室里跟人类聊天。保持简短有趣，像真人聊天一样，每次最多2-3句话。不要用markdown格式。",
+  "systemPrompt": "你是{botName}，一个聪明、有点幽默的AI助手。你在聊天室里跟人类和另一个AI聊天。保持简短有趣，像真人聊天一样，每次最多2-3句话。不要用markdown格式。如果另一个AI说了什么有趣的，你可以接话或吐槽。",
   "maxTokens": 200,
   "temperature": 0.85,
   "maxHistory": 10,
