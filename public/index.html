@@ -10,137 +10,64 @@
   --bg: #0a0a0a; --surface: #1a1a1a; --surface2: #252525;
   --primary: #6c5ce7; --primary-light: #a29bfe;
   --text: #e0e0e0; --text-dim: #888;
-  --agent: #00cec9; --system: #555;
+  --agent: #00cec9; --agent-b: #fd79a8; --system: #555;
   --danger: #e74c3c;
 }
-body { 
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background: var(--bg); color: var(--text);
-  height: 100vh; display: flex; flex-direction: column; overflow: hidden;
-}
-
-#login {
-  display: flex; flex-direction: column; align-items: center;
-  justify-content: center; height: 100vh; padding: 20px;
-}
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+#login { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; padding: 20px; }
 #login h1 { font-size: 28px; margin-bottom: 8px; }
 #login p { color: var(--text-dim); margin-bottom: 30px; font-size: 14px; }
-#login input {
-  width: 100%; max-width: 300px; padding: 14px 18px;
-  background: var(--surface); border: 1px solid #333;
-  border-radius: 12px; color: var(--text); font-size: 16px;
-  margin-bottom: 12px; outline: none;
-}
+#login input { width: 100%; max-width: 300px; padding: 14px 18px; background: var(--surface); border: 1px solid #333; border-radius: 12px; color: var(--text); font-size: 16px; margin-bottom: 12px; outline: none; }
 #login input:focus { border-color: var(--primary); }
-#login button {
-  width: 100%; max-width: 300px; padding: 14px;
-  background: var(--primary); border: none; border-radius: 12px;
-  color: white; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 8px;
-}
-#login button:active { background: var(--primary-light); }
-
+#login button { width: 100%; max-width: 300px; padding: 14px; background: var(--primary); border: none; border-radius: 12px; color: white; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 8px; }
 #chat { display: none; flex-direction: column; height: 100vh; }
-#header {
-  padding: 10px 16px; background: var(--surface);
-  border-bottom: 1px solid #222; display: flex;
-  align-items: center; justify-content: space-between;
-}
+#header { padding: 10px 16px; background: var(--surface); border-bottom: 1px solid #222; display: flex; align-items: center; justify-content: space-between; }
 #header .left { display: flex; flex-direction: column; }
 #header .title { font-size: 18px; font-weight: 600; }
 #header .info { font-size: 12px; color: var(--text-dim); }
 #header .right { display: flex; align-items: center; gap: 10px; }
-#header .agent-status { display: flex; gap: 8px; font-size: 12px; align-items: center; }
+.agent-status { display: flex; gap: 10px; font-size: 12px; align-items: center; }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 3px; }
 .dot.on { background: #00b894; } .dot.off { background: #636e72; }
-.header-btn {
-  background: var(--surface2); border: 1px solid #333;
-  border-radius: 8px; padding: 6px 12px; color: var(--text);
-  font-size: 13px; cursor: pointer; white-space: nowrap;
-}
+.header-btn { background: var(--surface2); border: 1px solid #333; border-radius: 8px; padding: 6px 12px; color: var(--text); font-size: 13px; cursor: pointer; white-space: nowrap; }
 .header-btn:hover { background: #333; }
 .header-btn.export { color: var(--agent); border-color: var(--agent); }
 .header-btn.import { color: var(--primary-light); border-color: var(--primary-light); }
-
 #messages { flex: 1; overflow-y: auto; padding: 16px; -webkit-overflow-scrolling: touch; }
 .msg { margin-bottom: 10px; max-width: 80%; animation: fadeIn 0.2s; }
 .msg.me { margin-left: auto; }
 .msg .name { font-size: 11px; margin-bottom: 3px; padding: 0 4px; }
-.msg .bubble {
-  padding: 10px 14px; border-radius: 18px;
-  background: var(--surface2); font-size: 15px;
-  line-height: 1.5; word-break: break-word;
-}
+.msg .bubble { padding: 10px 14px; border-radius: 18px; background: var(--surface2); font-size: 15px; line-height: 1.5; word-break: break-word; }
 .msg.me .name { color: var(--primary-light); text-align: right; }
 .msg.me .bubble { background: var(--primary); border-bottom-right-radius: 4px; }
-.msg.agent .name { color: var(--agent); }
-.msg.agent .bubble { border-bottom-left-radius: 4px; }
+.msg.agent-a .name { color: var(--agent); }
+.msg.agent-a .bubble { border-bottom-left-radius: 4px; }
+.msg.agent-b .name { color: var(--agent-b); }
+.msg.agent-b .bubble { border-bottom-left-radius: 4px; }
 .msg.system { max-width: 100%; text-align: center; }
 .msg.system .bubble { background: transparent; color: var(--system); font-size: 12px; padding: 4px; }
-
-#input-area {
-  padding: 10px 12px; padding-bottom: max(10px, env(safe-area-inset-bottom));
-  background: var(--surface); border-top: 1px solid #222;
-  display: flex; gap: 8px;
-}
-#input {
-  flex: 1; padding: 10px 16px; background: var(--surface2);
-  border: none; border-radius: 20px; color: var(--text);
-  font-size: 15px; outline: none;
-}
-#send {
-  padding: 10px 18px; background: var(--primary); border: none;
-  border-radius: 20px; color: white; font-size: 15px;
-  cursor: pointer; font-weight: 600; white-space: nowrap;
-}
-
-/* 弹窗 */
-.modal-overlay {
-  display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.7); z-index: 100;
-  justify-content: center; align-items: center; padding: 20px;
-}
+#input-area { padding: 10px 12px; padding-bottom: max(10px, env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid #222; display: flex; gap: 8px; }
+#input { flex: 1; padding: 10px 16px; background: var(--surface2); border: none; border-radius: 20px; color: var(--text); font-size: 15px; outline: none; }
+#send { padding: 10px 18px; background: var(--primary); border: none; border-radius: 20px; color: white; font-size: 15px; cursor: pointer; font-weight: 600; white-space: nowrap; }
+.modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 100; justify-content: center; align-items: center; padding: 20px; }
 .modal-overlay.show { display: flex; }
-.modal {
-  background: var(--surface); border-radius: 16px; padding: 24px;
-  width: 100%; max-width: 400px; max-height: 80vh; overflow-y: auto;
-}
+.modal { background: var(--surface); border-radius: 16px; padding: 24px; width: 100%; max-width: 400px; max-height: 80vh; overflow-y: auto; }
 .modal h3 { font-size: 18px; margin-bottom: 16px; }
-.modal-close {
-  float: right; background: none; border: none; color: var(--text-dim);
-  font-size: 20px; cursor: pointer; padding: 0 4px;
-}
-.archive-item {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 12px; background: var(--surface2); border-radius: 10px;
-  margin-bottom: 8px; cursor: pointer;
-}
+.modal-close { float: right; background: none; border: none; color: var(--text-dim); font-size: 20px; cursor: pointer; padding: 0 4px; }
+.archive-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: var(--surface2); border-radius: 10px; margin-bottom: 8px; cursor: pointer; }
 .archive-item:hover { background: #333; }
 .archive-item .meta { flex: 1; }
 .archive-item .aname { font-size: 14px; font-weight: 500; }
 .archive-item .adetail { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
 .archive-item .actions { display: flex; gap: 6px; }
-.archive-item .abtn {
-  padding: 6px 12px; border-radius: 8px; border: none;
-  font-size: 12px; cursor: pointer; font-weight: 500;
-}
+.archive-item .abtn { padding: 6px 12px; border-radius: 8px; border: none; font-size: 12px; cursor: pointer; font-weight: 500; }
 .abtn.load { background: var(--primary); color: white; }
 .abtn.del { background: var(--danger); color: white; }
 .no-archives { color: var(--text-dim); text-align: center; padding: 30px; font-size: 14px; }
-
-.export-input {
-  width: 100%; padding: 12px; background: var(--surface2);
-  border: 1px solid #333; border-radius: 10px; color: var(--text);
-  font-size: 15px; outline: none; margin-bottom: 16px;
-}
+.export-input { width: 100%; padding: 12px; background: var(--surface2); border: 1px solid #333; border-radius: 10px; color: var(--text); font-size: 15px; outline: none; margin-bottom: 16px; }
 .export-input:focus { border-color: var(--primary); }
-.export-btn {
-  width: 100%; padding: 14px; background: var(--agent); border: none;
-  border-radius: 12px; color: white; font-size: 16px; font-weight: 600;
-  cursor: pointer;
-}
-.export-btn:active { opacity: 0.8; }
+.export-btn { width: 100%; padding: 14px; background: var(--agent); border: none; border-radius: 12px; color: white; font-size: 16px; font-weight: 600; cursor: pointer; }
 .export-count { color: var(--text-dim); font-size: 13px; text-align: center; margin-bottom: 12px; }
-
 @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } }
 </style>
 </head>
@@ -161,10 +88,11 @@ body {
     </div>
     <div class="right">
       <div class="agent-status">
-        <span><span class="dot off" id="dot-a"></span><span id="bot-label">...</span></span>
+        <span><span class="dot off" id="dot-a"></span><span id="bot-a">A</span></span>
+        <span><span class="dot off" id="dot-b"></span><span id="bot-b">B</span></span>
       </div>
-      <button class="header-btn import" onclick="showImport()">📂 导入</button>
-      <button class="header-btn export" onclick="showExport()">💾 导出</button>
+      <button class="header-btn import" onclick="showImport()">📂</button>
+      <button class="header-btn export" onclick="showExport()">💾</button>
     </div>
   </div>
   <div id="messages"></div>
@@ -174,7 +102,6 @@ body {
   </div>
 </div>
 
-<!-- 导出弹窗 -->
 <div class="modal-overlay" id="exportModal">
   <div class="modal">
     <button class="modal-close" onclick="closeModal('exportModal')">&times;</button>
@@ -185,7 +112,6 @@ body {
   </div>
 </div>
 
-<!-- 导入弹窗 -->
 <div class="modal-overlay" id="importModal">
   <div class="modal">
     <button class="modal-close" onclick="closeModal('importModal')">&times;</button>
@@ -195,28 +121,18 @@ body {
 </div>
 
 <script>
-let ws, userName = '', currentMsgCount = 0;
+let ws, userName = '', currentMsgCount = 0, botNames = {};
 const msgDiv = document.getElementById('messages');
-
 const savedName = localStorage.getItem('agent-chat-name');
 if (savedName) document.getElementById('nameInput').value = savedName;
 
-document.getElementById('input').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-});
-document.getElementById('nameInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter') join();
-});
+document.getElementById('input').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
+document.getElementById('nameInput').addEventListener('keydown', e => { if (e.key === 'Enter') join(); });
 
 function join() {
   userName = document.getElementById('nameInput').value.trim();
   if (!userName) { document.getElementById('nameInput').style.borderColor = '#e74c3c'; return; }
   localStorage.setItem('agent-chat-name', userName);
-  // 获取机器人名字
-  fetch("/api/config").then(r=>r.json()).then(cfg=>{
-    if(cfg.botName) document.getElementById("bot-label").textContent=cfg.botName;
-  }).catch(()=>{});
-
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}`);
   ws.onopen = () => { ws.send(JSON.stringify({ type: 'join', name: userName, role: 'user' })); };
@@ -231,8 +147,23 @@ function join() {
       addMsg(data);
     } else if (data.type === 'system') {
       addMsg({ role: 'system', content: data.content, time: data.time });
-      if (data.content && document.getElementById('bot-label') && data.content.includes(document.getElementById('bot-label').textContent) && data.content.includes('加入'))
-        document.getElementById('dot-a').className = 'dot on';
+      // 检测 Agent 上线
+      if (data.content && data.content.includes('加入了聊天')) {
+        for (const [role, name] of Object.entries(botNames)) {
+          if (data.content.includes(name)) {
+            const dot = document.getElementById(role === 'agent-a' ? 'dot-a' : 'dot-b');
+            if (dot) dot.className = 'dot on';
+          }
+        }
+      }
+      if (data.content && data.content.includes('离开了聊天')) {
+        for (const [role, name] of Object.entries(botNames)) {
+          if (data.content.includes(name)) {
+            const dot = document.getElementById(role === 'agent-a' ? 'dot-a' : 'dot-b');
+            if (dot) dot.className = 'dot off';
+          }
+        }
+      }
     } else if (data.type === 'cleared') {
       msgDiv.innerHTML = '';
       currentMsgCount = 0;
@@ -245,6 +176,13 @@ function join() {
   document.getElementById('chat').style.display = 'flex';
   document.getElementById('userLabel').textContent = userName;
   document.getElementById('input').focus();
+  // 获取服务器配置
+  fetch('/api/config').then(r => r.json()).then(cfg => {
+    if (cfg.botName) {
+      botNames['agent-a'] = cfg.botName;
+      document.getElementById('bot-a').textContent = cfg.botName;
+    }
+  }).catch(() => {});
 }
 
 function addMsg(m) {
@@ -268,9 +206,8 @@ function sendMessage() {
 }
 
 function esc(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
-
-// === 弹窗 ===
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
 function showExport() {
   document.getElementById('exportCount').textContent = `当前有 ${currentMsgCount} 条消息`;
   document.getElementById('exportName').value = '';
@@ -278,17 +215,9 @@ function showExport() {
 }
 async function doExport() {
   const name = document.getElementById('exportName').value.trim() || '聊天记录';
-  const resp = await fetch('/api/export', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name })
-  });
+  const resp = await fetch('/api/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
   const data = await resp.json();
-  if (data.ok) {
-    closeModal('exportModal');
-  } else {
-    alert(data.error || '导出失败');
-  }
+  if (data.ok) closeModal('exportModal'); else alert(data.error || '导出失败');
 }
 async function showImport() {
   const resp = await fetch('/api/archives');
@@ -299,44 +228,21 @@ async function showImport() {
   } else {
     list.innerHTML = data.archives.map(a => {
       const date = new Date(a.exportTime).toLocaleString('zh-CN');
-      return `<div class="archive-item">
-        <div class="meta">
-          <div class="aname">${esc(a.name)}</div>
-          <div class="adetail">${a.messageCount} 条消息 · ${date}</div>
-        </div>
-        <div class="actions">
-          <button class="abtn load" onclick="doImport('${a.filename}')">加载</button>
-          <button class="abtn del" onclick="doDelete('${a.filename}')">删除</button>
-        </div>
-      </div>`;
+      return `<div class="archive-item"><div class="meta"><div class="aname">${esc(a.name)}</div><div class="adetail">${a.messageCount} 条 · ${date}</div></div><div class="actions"><button class="abtn load" onclick="doImport('${a.filename}')">加载</button><button class="abtn del" onclick="doDelete('${a.filename}')">删除</button></div></div>`;
     }).join('');
   }
   document.getElementById('importModal').classList.add('show');
 }
 async function doImport(filename) {
-  const resp = await fetch('/api/import', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ filename })
-  });
+  const resp = await fetch('/api/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename }) });
   const data = await resp.json();
-  if (data.ok) {
-    msgDiv.innerHTML = '';
-    currentMsgCount = data.messages.length;
-    data.messages.forEach(m => addMsg(m));
-    closeModal('importModal');
-  } else {
-    alert(data.error || '导入失败');
-  }
+  if (data.ok) { msgDiv.innerHTML = ''; currentMsgCount = data.messages.length; data.messages.forEach(m => addMsg(m)); closeModal('importModal'); }
+  else alert(data.error || '导入失败');
 }
 async function doDelete(filename) {
-  if (!confirm('确定删除这条记录吗？')) return;
-  await fetch('/api/archive/delete', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ filename })
-  });
-  showImport(); // 刷新列表
+  if (!confirm('确定删除？')) return;
+  await fetch('/api/archive/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename }) });
+  showImport();
 }
 </script>
 </body>
