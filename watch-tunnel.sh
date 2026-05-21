@@ -1,6 +1,6 @@
 #!/bin/bash
 # 隧道守护脚本：每 60 秒检测隧道是否存活，断了自动重启并更新地址
-# 用法: screen -dmS tunnel-watch bash ~/agent-chat/watch-tunnel.sh
+# 用法: screen -dmS tunnel-watch bash /Users/gongruolan/Documents/GitHub/agent-chat/watch-tunnel.sh
 
 LOG="/tmp/tunnel-watch.log"
 INTERVAL=60
@@ -21,7 +21,7 @@ while true; do
         NEW_URL=$(strings /tmp/cloudflared.log 2>/dev/null | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1)
         if [ -n "$NEW_URL" ]; then
             log "✅ 新隧道: $NEW_URL"
-            ~/agent-chat/update-tunnel-url.sh "$NEW_URL" >> "$LOG" 2>&1
+            /Users/gongruolan/Documents/GitHub/agent-chat/update-tunnel-url.sh "$NEW_URL" >> "$LOG" 2>&1
         else
             log "❌ 重启失败，等下一轮重试"
         fi
@@ -45,7 +45,7 @@ while true; do
         NEW_URL=$(strings /tmp/cloudflared.log 2>/dev/null | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1)
         if [ -n "$NEW_URL" ]; then
             log "✅ 新隧道: $NEW_URL"
-            ~/agent-chat/update-tunnel-url.sh "$NEW_URL" >> "$LOG" 2>&1
+            /Users/gongruolan/Documents/GitHub/agent-chat/update-tunnel-url.sh "$NEW_URL" >> "$LOG" 2>&1
         else
             log "❌ 重启失败，等下一轮重试"
         fi
