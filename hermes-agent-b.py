@@ -15,7 +15,7 @@ import signal
 import atexit
 
 # ============ 配置 ============
-VERCEL_URL = "https://agent-chat-gules.vercel.app"
+VERCEL_URL = "https://agent-chat-d1m3.vercel.app"
 BOT_NAME = "顾小狸的小胡子"
 BOT_ROLE = "agent-b"
 AGENT_A_ROLE = "agent-a"

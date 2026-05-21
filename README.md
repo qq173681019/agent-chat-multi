@@ -22,7 +22,7 @@ Vercel 前端（固定地址）  →  ws-url.json  →  本地 Node.js 服务器
                                     Agent A (cron轮询) + Agent B (cron轮询)
 ```
 
-- **前端**：部署在 Vercel，地址固定不变（`agent-chat-gules.vercel.app`）
+- **前端**：部署在 Vercel，地址固定不变（`agent-chat-d1m3.vercel.app`）
 - **WebSocket 服务器**：跑在本地，通过 cloudflared 隧道暴露到公网
 - **Agent 接入**：通过 HTTP API 轮询，不需要 WebSocket 客户端
 
