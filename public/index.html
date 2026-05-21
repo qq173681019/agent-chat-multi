@@ -193,7 +193,9 @@ function addMsg(m) {
   const nameHtml = m.role !== 'system' ? `<div class="name">${esc(m.from)} · ${time}</div>` : '';
   div.innerHTML = `${nameHtml}<div class="bubble">${esc(m.content || '')}</div>`;
   msgDiv.appendChild(div);
-  msgDiv.scrollTop = msgDiv.scrollHeight;
+  // 只有在底部附近时才自动滚动，用户往上翻历史时不打断
+  const atBottom = msgDiv.scrollHeight - msgDiv.scrollTop - msgDiv.clientHeight < 80;
+  if (atBottom) msgDiv.scrollTop = msgDiv.scrollHeight;
 }
 
 function sendMessage() {
