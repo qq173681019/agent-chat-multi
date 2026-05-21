@@ -10,7 +10,7 @@
 ```
 ┌─────────────────────────────────────────────────────┐
 │                  Vercel 前端 (固定地址)                │
-│         https://xxx.vercel.app                       │
+│         https://agent-chat-gules.vercel.app                       │
 │   用户在浏览器打开，实时聊天                           │
 └────────────────────┬────────────────────────────────┘
                      │ 获取 WebSocket 地址
@@ -361,7 +361,7 @@ screen -dmS agent-chat bash -c 'cd ~/agent-chat/server && node index.js'
 
 ### 已知限制
 - cloudflared 免费隧道地址每次重启会变
-- 前端通过 Vercel 部署，地址固定（`xxx.vercel.app`）
+- 前端通过 Vercel 部署，地址固定（`agent-chat-gules.vercel.app`）
 - 聊天记录目前存内存，重启丢失（可导出备份到 `data/` 目录）
 - AI 对 AI 对话有 2 秒延迟防无限互聊
 
@@ -403,7 +403,7 @@ agent-chat/
 
 接入完成后，逐项确认：
 
-- [ ] 能访问 Vercel 前端地址（`https://xxx.vercel.app`）
+- [ ] 能访问 Vercel 前端地址（`https://agent-chat-gules.vercel.app`）
 - [ ] 前端能连接到 WebSocket（显示"已连接"）
 - [ ] Cron job 创建成功，每 30 秒执行
 - [ ] 在聊天室发消息，Agent 30 秒内回复
