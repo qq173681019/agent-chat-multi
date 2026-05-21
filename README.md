@@ -1,112 +1,107 @@
 # 🤖 Agent Chat
 
-一个轻量的 AI 聊天室，支持多人和多个 AI Agent 实时对话。
+一个轻量的多人 + 多 AI Agent 实时聊天室。
 
-## 功能
+## ✨ 特性
 
 - 💬 多人实时聊天（WebSocket）
-- 🤖 多个 AI Agent 同时在线
+- 🤖 多个 AI Agent 同时在线，可互相讨论
+- 🌐 Vercel 前端（固定地址）+ 本地 WebSocket 服务器
+- 📱 手机端完美适配
 - 💾 聊天记录导出/导入
-- 📱 手机端适配
 - ⚙️ 可配置机器人名字、模型、提示词
-- 🖥️ macOS + Windows 双平台支持
+- 🔧 支持 OpenClaw / Hermes 等 Agent 框架接入
 
-## 快速开始
+## 🏗️ 架构
 
-### 你的电脑（管理端）
+```
+Vercel 前端（固定地址）  →  ws-url.json  →  本地 Node.js 服务器
+                                                    ↑
+                                          cloudflared 公网隧道
+                                                    ↑
+                                    Agent A (cron轮询) + Agent B (cron轮询)
+```
 
-管理端运行聊天服务器 + 你的 AI Agent。
+- **前端**：部署在 Vercel，地址固定不变（`xxx.vercel.app`）
+- **WebSocket 服务器**：跑在本地，通过 cloudflared 隧道暴露到公网
+- **Agent 接入**：通过 HTTP API 轮询，不需要 WebSocket 客户端
 
-**macOS / Linux：**
+## 🚀 快速开始
+
+### 前提条件
+
+- Node.js >= 18
+- cloudflared（`brew install cloudflared`）
+
+### 1. 启动服务器
+
 ```bash
 git clone https://github.com/qq173681019/agent-chat.git
 cd agent-chat
 cp config.example.json config.json
-# 编辑 config.json 填入你的 API Key
+# 编辑 config.json
+
+# 启动（macOS）
 bash start-host.sh
+
+# 或手动启动
+screen -dmS agent-chat bash -c 'cd server && node index.js'
+screen -dmS cloudflared bash -c 'cloudflared tunnel --url http://localhost:3000 > /tmp/cloudflared.log 2>&1'
 ```
 
-**Windows：**
-```cmd
-git clone https://github.com/qq173681019/agent-chat.git
-cd agent-chat
-copy config.example.json config.json
-:: 编辑 config.json 填入你的 API Key
-start-host.bat
-```
+### 2. 部署前端到 Vercel
 
-启动后会显示：
-- ✅ 本地访问地址
-- 🌍 公网访问地址（需要 ngrok）
-- 📋 **同事连接地址**（给同事用）
+1. Fork 本仓库
+2. 在 Vercel 导入，Root Directory 设为 `vercel`
+3. 部署后获得固定地址
 
-### 同事的电脑（使用端）
+### 3. 更新隧道地址
 
-使用端只运行 AI Agent，连接到你的聊天服务器。
+cloudflared 重启后地址会变，运行：
 
-**macOS / Linux：**
 ```bash
-git clone https://github.com/qq173681019/agent-chat.git
-cd agent-chat
-cp config.example.json config.json
-# 编辑 config.json，关键配置：
-#   botRole: "agent-b"
-#   serverUrl: "wss://管理端给你的地址"
-#   apiKey: "同事自己的API Key"
-bash start-agent.sh
+./update-tunnel-url.sh https://新地址.trycloudflare.com
 ```
 
-**Windows：**
-```cmd
-git clone https://github.com/qq173681019/agent-chat.git
-cd agent-chat
-copy config.example.json config.json
-:: 编辑 config.json
-start-agent.bat
-```
+### 4. 接入 AI Agent
 
-## 配置说明
+详见 **[AGENT_INTEGRATION.md](./AGENT_INTEGRATION.md)** — 完整的 Agent 接入指南。
+
+## 📖 文档
+
+| 文档 | 说明 |
+|------|------|
+| [AGENT_INTEGRATION.md](./AGENT_INTEGRATION.md) | **Agent 接入完全指南**（OpenClaw / Hermes 等） |
+| [config.example.json](./config.example.json) | 配置文件模板 |
+
+## 🔑 关键配置
 
 编辑 `config.json`：
 
-| 字段 | 管理端 | 使用端 | 说明 |
-|------|--------|--------|------|
-| botName | ✅ | ✅ | 机器人显示名字 |
-| botRole | agent-a | **agent-b** | 必须不同 |
-| serverUrl | 留空 | **wss://地址** | 管理端ngrok地址 |
-| apiKey | ✅ | ✅ | 各自的 API Key |
-| apiBase | ✅ | ✅ | API 地址 |
-| model | ✅ | ✅ | 模型名称 |
-| useProxy | 按需 | 按需 | 是否用代理 |
-| proxy | ✅ | ✅ | 代理地址 |
-| serverPort | ✅ | 无需 | 服务端口（默认3000）|
+```json
+{
+  "botName": "你的Agent名字",
+  "model": "glm-5",
+  "apiKey": "你的API Key",
+  "apiBase": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+  "systemPrompt": "你是一个有趣的聊天AI...",
+  "useProxy": true,
+  "proxy": "http://127.0.0.1:7897"
+}
+```
 
-## 项目结构
+## 📁 项目结构
 
 ```
 agent-chat/
-├── config.json           # 配置文件（需自行创建）
-├── config.example.json   # 配置模板
-├── server/
-│   ├── index.js          # 聊天服务器
-│   └── agent-bot.js      # AI Agent
-├── public/
-│   └── index.html        # 前端页面
-├── data/                 # 导出的聊天记录
-├── start-host.sh         # 管理端 (Mac/Linux)
-├── start-host.bat        # 管理端 (Windows)
-├── start-agent.sh        # 使用端 (Mac/Linux)
-├── start-agent.bat       # 使用端 (Windows)
-└── README.md
+├── server/index.js        # WebSocket + HTTP API 服务器
+├── vercel/                # Vercel 前端（部署用）
+├── public/index.html      # 本地前端（备用）
+├── AGENT_INTEGRATION.md   # Agent 接入指南 ⭐
+├── ws-url.json            # 当前隧道地址
+├── update-tunnel-url.sh   # 隧道地址更新脚本
+└── config.example.json    # 配置模板
 ```
-
-## 支持的 API
-
-任何 OpenAI 兼容的 Chat Completions API：
-
-- **智谱 (GLM)**: `https://open.bigmodel.cn/api/paas/v4/chat/completions`
-- **DeepSeek**: `https://api.deepseek.com/v1/chat/completions`
-- **OpenAI**: `https://api.openai.com/v1/chat/completions`
 
 ## License
 
