@@ -53,6 +53,48 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   flex-direction: row;
 }
 #unread-btn:hover { opacity: 0.9; }
+.online-users-btn {
+  background: var(--surface2);
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 5px 10px;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  position: relative;
+}
+.online-users-btn:hover { background: #333; }
+#online-users-dropdown {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 6px;
+  background: var(--surface2);
+  border: 1px solid #333;
+  border-radius: 10px;
+  min-width: 160px;
+  z-index: 300;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  overflow: hidden;
+}
+#online-users-dropdown .dropdown-title {
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--text-dim);
+  border-bottom: 1px solid #333;
+}
+#online-users-dropdown .user-item {
+  padding: 8px 12px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+#online-users-dropdown .user-item .dot {
+  width: 6px; height: 6px;
+}
+#no-users { padding: 10px 12px; font-size: 13px; color: var(--text-dim); font-style: italic; }
 #conn-status { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: var(--surface2); color: var(--text-dim); }
 #conn-status.connected { color: #00b894; }
 #conn-status.reconnecting { color: #fdcb6e; }
@@ -109,6 +151,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <div class="left">
       <div class="title">Agent Chat</div>
       <div class="info" id="userLabel"></div>
+      <button class="online-users-btn" id="onlineUsersBtn" onclick="toggleOnlineUsers()">
+        👥 在线 <span id="online-count">0</span>
+        <div id="online-users-dropdown">
+          <div class="dropdown-title">当前在线</div>
+          <div id="online-users-list"></div>
+        </div>
+      </button>
     </div>
     <div class="right">
       <span id="conn-status">连接中</span>
@@ -371,6 +420,38 @@ function hideUnreadBtn() {
   if (btn) btn.style.display = 'none';
   unreadCount = 0;
 }
+
+let onlineUsersInterval = null;
+let onlineDropdownOpen = false;
+
+function toggleOnlineUsers() {
+  const dropdown = document.getElementById('online-users-dropdown');
+  onlineDropdownOpen = !onlineDropdownOpen;
+  dropdown.style.display = onlineDropdownOpen ? 'block' : 'none';
+  if (onlineDropdownOpen) pollOnlineUsers();
+}
+
+function pollOnlineUsers() {
+  fetch(WS_BASE + '/api/online-users').then(r => r.json()).then(data => {
+    const list = document.getElementById('online-users-list');
+    const count = document.getElementById('online-count');
+    count.textContent = data.users.length;
+    if (data.users.length === 0) {
+      list.innerHTML = '<div id="no-users">暂无其他在线用户</div>';
+    } else {
+      list.innerHTML = data.users.map(u =>
+        '<div class="user-item"><span class="dot on" style="background:#00b894;display:inline-block;width:6px;height:6px;border-radius:50%;"></span>' + esc(u.name) + '</div>'
+      ).join('');
+    }
+  }).catch(() => {
+    document.getElementById('online-users-list').innerHTML = '<div id="no-users">获取失败</div>';
+  });
+}
+
+// Poll online users every 5 seconds when dropdown might be open
+setInterval(() => {
+  if (onlineDropdownOpen) pollOnlineUsers();
+}, 5000);
 
 async function showImport() {
   const base = getServerBase();

@@ -51,6 +51,15 @@ const server = http.createServer((req, res) => {
   }
   
   // 获取待处理的 Agent 消息（轮询用）
+
+  // 获取当前在线的人类用户列表
+  if (url.pathname === "/api/online-users" && req.method === 'GET') {
+    const humanUsers = Object.values(users).filter(u => u.role === 'user');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ users: humanUsers }));
+    return;
+  }
+
   if (url.pathname === '/api/poll' && req.method === 'GET') {
     const since = parseInt(url.searchParams.get('since') || '0');
     const pending = messages.filter(m => m.id > since && m.role !== 'system');
