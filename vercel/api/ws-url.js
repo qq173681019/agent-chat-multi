@@ -1,7 +1,7 @@
 // Vercel Serverless Function: 获取 WebSocket 地址
 // 从 GitHub raw 读取，加时间戳防缓存
 
-const GITHUB_RAW_URL = 'https://cdn.jsdelivr.net/gh/qq173681019/agent-chat/ws-url.json';
+const GITHUB_RAW_URL = 'https://raw.githubusercontent.com/qq173681019/agent-chat/main/ws-url.json';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
