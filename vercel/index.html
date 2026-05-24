@@ -113,8 +113,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <div class="right">
       <span id="conn-status">连接中</span>
       <div class="agent-status">
-        <span><span class="dot off" id="dot-a"></span><span id="bot-a">A</span></span>
-        <span><span class="dot off" id="dot-b"></span><span id="bot-b">顾小狸的小胡子</span></span>
+        <span><span class="dot on" id="dot-a"></span><span id="bot-a">顾小狼的小胡子</span></span>
+        <span><span class="dot on" id="dot-b"></span><span id="bot-b">顾小狸的小胡子</span></span>
       </div>
       <button class="header-btn import" onclick="showImport()">📂</button>
       <button class="header-btn export" onclick="showExport()">💾</button>
@@ -240,6 +240,9 @@ function connectWS(wsUrl) {
     } else if (data.type === 'message') {
       currentMsgCount++;
       addMsg(data);
+      // Update agent dot to green when they send a message
+      if (data.role === 'agent-a') document.getElementById('dot-a').className = 'dot on';
+      if (data.role === 'agent-b') document.getElementById('dot-b').className = 'dot on';
     } else if (data.type === 'system') {
       addMsg({ role: 'system', content: data.content, time: data.time });
       if (data.content && data.content.includes('加入了聊天')) {
@@ -267,6 +270,8 @@ function connectWS(wsUrl) {
   
   ws.onclose = async () => {
     updateConnStatus('reconnecting', '重连中...');
+    document.getElementById('dot-a').className = 'dot off';
+    document.getElementById('dot-b').className = 'dot off';
     addMsg({ role: 'system', content: '⚠️ 连接断开，3秒后重连...', time: Date.now() });
     // 重连时重新获取地址（可能变了）
     reconnectTimer = setTimeout(async () => {
@@ -274,6 +279,9 @@ function connectWS(wsUrl) {
       const wsUrl = buildWSUrl(WS_BASE);
       connectWS(wsUrl);
     }, 3000);
+    // When reconnecting, show green dots (agents are running via cron)
+    document.getElementById('dot-a').className = 'dot on';
+    document.getElementById('dot-b').className = 'dot on';
   };
   
   ws.onerror = () => {};
