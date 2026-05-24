@@ -150,7 +150,7 @@ async function getWSUrl() {
   } catch (e) {}
   try {
     // fallback: 直接从 jsdelivr CDN 读取
-    const resp = await fetch('https://cdn.jsdelivr.net/gh/qq173681019/agent-chat/ws-url.json?t=' + Date.now());
+    const resp = await fetch('https://raw.githubusercontent.com/qq173681019/agent-chat/main/ws-url.json?t=' + Date.now());
     const data = await resp.json();
     if (data.url) return data.url;
   } catch (e) {}
