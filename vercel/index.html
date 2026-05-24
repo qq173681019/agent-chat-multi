@@ -34,6 +34,25 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .header-btn:hover { background: #333; }
 .header-btn.export { color: var(--agent); border-color: var(--agent); }
 .header-btn.import { color: var(--primary-light); border-color: var(--primary-light); }
+#unread-btn {
+  display: none;
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  padding: 8px 18px;
+  font-size: 14px;
+  cursor: pointer;
+  z-index: 200;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  align-items: center;
+  flex-direction: row;
+}
+#unread-btn:hover { opacity: 0.9; }
 #conn-status { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: var(--surface2); color: var(--text-dim); }
 #conn-status.connected { color: #00b894; }
 #conn-status.reconnecting { color: #fdcb6e; }
@@ -133,7 +152,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 let WS_BASE = '';
 
 let ws, userName = '', currentMsgCount = 0, botNames = {}, reconnectTimer = null;
+let userHasScrolledUp = false;
+let unreadCount = 0;
 const msgDiv = document.getElementById('messages');
+msgDiv.addEventListener('scroll', () => {
+  const atBottom = msgDiv.scrollHeight - msgDiv.scrollTop - msgDiv.clientHeight < 80;
+  if (!atBottom) {
+    userHasScrolledUp = true;
+    hideUnreadBtn();
+  } else {
+    userHasScrolledUp = false;
+  }
+});
 const savedName = localStorage.getItem('agent-chat-name');
 if (savedName) document.getElementById('nameInput').value = savedName;
 
@@ -204,6 +234,9 @@ function connectWS(wsUrl) {
       msgDiv.innerHTML = '';
       currentMsgCount = data.messages.length;
       data.messages.forEach(m => addMsg(m));
+      msgDiv.scrollTop = msgDiv.scrollHeight;
+      userHasScrolledUp = false;
+      hideUnreadBtn();
     } else if (data.type === 'message') {
       currentMsgCount++;
       addMsg(data);
@@ -268,9 +301,17 @@ function addMsg(m) {
   const nameHtml = m.role !== 'system' ? `<div class="name">${esc(m.from)} · ${time}</div>` : '';
   div.innerHTML = `${nameHtml}<div class="bubble">${esc(m.content || '')}</div>`;
   msgDiv.appendChild(div);
-  // 只有在底部附近时才自动滚动，用户往上翻历史时不打断
+  // 新消息：如果用户在底部，自动滚动；否则只计数未读
   const atBottom = msgDiv.scrollHeight - msgDiv.scrollTop - msgDiv.clientHeight < 80;
-  if (atBottom) msgDiv.scrollTop = msgDiv.scrollHeight;
+  if (atBottom) {
+    msgDiv.scrollTop = msgDiv.scrollHeight;
+    userHasScrolledUp = false;
+    hideUnreadBtn();
+  } else {
+    userHasScrolledUp = true;
+    unreadCount++;
+    showUnreadBtn();
+  }
 }
 
 function sendMessage() {
@@ -300,6 +341,29 @@ async function doExport() {
   const data = await resp.json();
   if (data.ok) closeModal('exportModal'); else alert(data.error || '导出失败');
 }
+function showUnreadBtn() {
+  let btn = document.getElementById('unread-btn');
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.id = 'unread-btn';
+    btn.innerHTML = '⬇️ 底部';
+    btn.onclick = () => {
+      msgDiv.scrollTop = msgDiv.scrollHeight;
+      userHasScrolledUp = false;
+      hideUnreadBtn();
+    };
+    document.getElementById('chat').appendChild(btn);
+  }
+  const badge = unreadCount > 0 ? ' (' + unreadCount + ')' : '';
+  btn.innerHTML = '⬇️ 底部' + badge;
+  btn.style.display = 'flex';
+}
+function hideUnreadBtn() {
+  const btn = document.getElementById('unread-btn');
+  if (btn) btn.style.display = 'none';
+  unreadCount = 0;
+}
+
 async function showImport() {
   const base = getServerBase();
   const resp = await fetch(base + '/api/archives');
