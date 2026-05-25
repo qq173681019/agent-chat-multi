@@ -8,7 +8,7 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end();
 
   return res.status(200).json({
-    url: 'https://newbie-cordless-searching-procedure.trycloudflare.com',
-    updated: 1779637200000
+    url: 'https://conflicts-albert-commission-salt.trycloudflare.com',
+    updated: Date.now()
   });
 }
