@@ -2,18 +2,16 @@
 import sys, json, requests
 
 def get_server_url():
-    """获取服务器地址，优先本地 multi-agent 服务器"""
-    try:
-        r = requests.get("http://localhost:3001/api/agents", timeout=3)
-        if r.status_code == 200:
-            return "http://localhost:3001"
-    except:
-        pass
+    """获取服务器地址，通过 Vercel API 获取隧道地址"""
     try:
         r = requests.get("https://agent-chat-d1m3.vercel.app/api/ws-url", timeout=10)
-        return r.json()["url"]
-    except:
-        return "http://localhost:3001"
+        url = r.json().get("url", "")
+        if url:
+            return url
+    except Exception as e:
+        print(f"Vercel API 失败: {e}")
+    # fallback 到本地
+    return "http://localhost:3000"
 
 def poll(server, since=0):
     r = requests.get(f"{server}/api/poll?since={since}", timeout=10)
