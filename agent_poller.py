@@ -5,17 +5,41 @@ Multi-Agent Chat 通用轮询脚本
 """
 import sys
 import os
+
+# 修复 Windows 控制台编码
+if sys.platform == 'win32':
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+    os.environ['NO_PROXY'] = '*'
+    os.environ['no_proxy'] = '*'
+
 import json
 import time
-import requests
 import re
+import signal
+import atexit
+import warnings
+warnings.filterwarnings("ignore", message="Unverified HTTPS")
+import requests
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-AGENTS_JSON = os.path.join(SCRIPT_DIR, '..', 'agents.json')
+AGENTS_JSON = os.path.join(SCRIPT_DIR, 'agents.json')
 HELPER = os.path.join(SCRIPT_DIR, 'chat_helper.py')
 
+# ---- 加载 .env ----
+_dotenv_path = os.path.join(SCRIPT_DIR, '.env')
+if os.path.exists(_dotenv_path):
+    with open(_dotenv_path, 'r', encoding='utf-8') as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if _line and not _line.startswith('#') and '=' in _line:
+                _k, _, _v = _line.partition('=')
+                os.environ.setdefault(_k.strip(), _v.strip())
+
 def load_agents():
-    with open(os.path.join(SCRIPT_DIR, 'agents.json'), 'r', encoding='utf-8') as f:
+    with open(AGENTS_JSON, 'r', encoding='utf-8') as f:
         return json.load(f)
 
 def get_server_url():
@@ -101,49 +125,73 @@ def main():
     if len(sys.argv) < 2:
         print("用法: python3 agent_poller.py <agent_id>")
         print("示例: python3 agent_poller.py hooligan")
+        print("      python3 agent_poller.py all    # 启动全部")
         sys.exit(1)
-    
+
     agent_id = sys.argv[1]
     config_data = load_agents()
-    
+
     # 找到 agent 配置
     agent = None
     for a in config_data.get("agents", []):
         if a["id"] == agent_id:
             agent = a
             break
-    
+
     if not agent:
         print(f"❌ 找不到 agent: {agent_id}")
         print(f"可用: {', '.join(a['id'] for a in config_data.get('agents', []))}")
         sys.exit(1)
-    
+
     if not agent.get("enabled", True):
         print(f"⏸️  {agent['name']} 已禁用")
         sys.exit(0)
-    
+
     name = agent["name"]
     avatar = agent.get("avatar", "🤖")
     poll_interval = agent.get("pollIntervalSec", 60)
-    
+
+    pid_file = os.path.join(SCRIPT_DIR, f".poller_{agent_id}.pid")
+    last_processed_file = os.path.join(SCRIPT_DIR, f".last_id_{agent_id}")
+
+    def cleanup():
+        try:
+            if os.path.exists(pid_file): os.unlink(pid_file)
+        except: pass
+
+    def sig_handler(s, f):
+        nonlocal running
+        print(f"\n[{ts()}] 🛑 收到停止信号")
+        running = False
+
+    signal.signal(signal.SIGINT, sig_handler)
+    signal.signal(signal.SIGTERM, sig_handler)
+    atexit.register(cleanup)
+
+    with open(pid_file, 'w') as f: f.write(str(os.getpid()))
+
     print(f"""
 ╔══════════════════════════════════════╗
-║  {avatar} {name} ({agent_id})          
-║  轮询间隔: {poll_interval}秒             
+║  {avatar} {name} ({agent_id})
+║  轮询间隔: {poll_interval}秒
+║  PID: {os.getpid()}
+║  Provider: {' → '.join(p['name'] for p in PROVIDERS)}
 ╚══════════════════════════════════════╝
 """)
     
     last_id = 0
-    last_processed_file = os.path.join(SCRIPT_DIR, f".last_id_{agent_id}")
-    
     # 读取上次处理到的 ID
     try:
         with open(last_processed_file, 'r') as f:
             last_id = int(f.read().strip())
     except:
         pass
-    
+
     running = True
+    ok_count = 0
+    err_count = 0
+    print(f"[{ts()}] 启动，last_id={last_id}")
+
     while running:
         try:
             server = get_server_url()
@@ -157,7 +205,7 @@ def main():
                 if need and target:
                     from_name = target.get("from", "?")
                     content = target.get("content", "")[:50]
-                    print(f"[{time.strftime('%H:%M:%S')}] 📨 {from_name}: {content}...")
+                    print(f"[{ts()}] 📨 {from_name}: {content}...")
                     
                     # 构建上下文
                     all_msgs = poll(server, 0).get("messages", [])
@@ -170,9 +218,9 @@ def main():
                     if reply_text:
                         result = send_reply(server, agent_id, name, reply_text)
                         if result.get("ok"):
-                            print(f"[{time.strftime('%H:%M:%S')}] ✅ {reply_text[:50]}")
+                            print(f"[{ts()}] ✅ {reply_text[:50]}")
                         else:
-                            print(f"[{time.strftime('%H:%M:%S')}] ❌ 发送失败")
+                            print(f"[{ts()}] ❌ 发送失败")
             
             # 保存 last_id
             last_id = new_last_id
@@ -183,47 +231,114 @@ def main():
             print(f"\n[{time.strftime('%H:%M:%S')}] 🛑 {name} 停止")
             running = False
         except Exception as e:
-            print(f"[{time.strftime('%H:%M:%S')}] ❌ 错误: {e}")
-        
+            print(f"[{ts()}] ❌ 错误: {e}")
+            err_count += 1
+
         for _ in range(poll_interval):
-            try:
-                time.sleep(1)
+            if not running: break
+            try: time.sleep(1)
             except KeyboardInterrupt:
                 running = False
                 break
 
+    print(f"\n[{ts()}] 🛑 {name} 停止。成功{ok_count}次，失败{err_count}次")
+
+def _build_providers():
+    """按优先级构建 provider 列表: 智谱 → MiniMax → OpenRouter(免费)"""
+    providers = []
+    # 1. 智谱
+    zk = os.environ.get("ZHIPU_API_KEY", "")
+    if zk:
+        providers.append({
+            "name": "智谱",
+            "api_key": zk,
+            "api_base": os.environ.get("ZHIPU_API_BASE", "https://open.bigmodel.cn/api/paas/v4/chat/completions"),
+            "model": os.environ.get("ZHIPU_MODEL", "glm-4-flash"),
+        })
+    # 2. MiniMax
+    mk = os.environ.get("MINIMAX_API_KEY", "")
+    if mk:
+        providers.append({
+            "name": "MiniMax",
+            "api_key": mk,
+            "api_base": os.environ.get("MINIMAX_API_BASE", "https://api.minimaxi.chat/v1/text/chatcompletion_v2"),
+            "model": os.environ.get("MINIMAX_MODEL", "MiniMax-Text-01"),
+        })
+    # 3. OpenRouter 兜底
+    ok = os.environ.get("OPENROUTER_API_KEY", "")
+    if ok:
+        providers.append({
+            "name": "OpenRouter",
+            "api_key": ok,
+            "api_base": os.environ.get("OPENROUTER_API_BASE", "https://openrouter.ai/api/v1/chat/completions"),
+            "model": os.environ.get("OPENROUTER_MODEL", "deepseek/deepseek-v4-flash:free"),
+        })
+    return providers
+
+PROVIDERS = _build_providers()
+
+
+def ts():
+    return time.strftime("%H:%M:%S")
+
+
 def call_model_direct(agent_config, prompt):
-    """直接调用 API 生成回复"""
-    api_key = os.environ.get("LLM_API_KEY", "")
-    api_base = os.environ.get("LLM_API_BASE", "https://open.bigmodel.cn/api/paas/v4/chat/completions")
-    model = os.environ.get("LLM_MODEL", "glm-4-flash")
-    
-    try:
-        resp = requests.post(api_base,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}"
-            },
-            json={
-                "model": model,
-                "messages": [
-                    {"role": "system", "content": "你是一个聊天室里的角色。请用简短自然的语气回复，1-3句话，不要用markdown格式，不要用引号包裹你的回复。"},
-                    {"role": "user", "content": prompt}
-                ],
-                "max_tokens": 200,
-                "temperature": 0.9
-            },
-            timeout=30
-        )
-        data = resp.json()
-        if data.get("choices") and data["choices"][0]:
-            text = data["choices"][0]["message"]["content"].strip()
-            # 清理 markdown
-            text = re.sub(r'[*#`]', '', text)
-            text = text.strip('"\'')
-            return text
-    except Exception as e:
-        print(f"  API 错误: {e}")
+    """多 provider 带自动 fallback: 智谱 → MiniMax → OpenRouter(免费)"""
+    system_msg = "你是一个聊天室里的角色。请用简短自然的语气回复，1-3句话，不要用markdown格式，不要用引号包裹你的回复。"
+    messages = [
+        {"role": "system", "content": system_msg},
+        {"role": "user", "content": prompt}
+    ]
+
+    for p in PROVIDERS:
+        tag = p['name']
+        short_model = p['model'].split('/')[-1]
+        try:
+            resp = requests.post(
+                p["api_base"],
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {p['api_key']}"
+                },
+                json={
+                    "model": p["model"],
+                    "messages": messages,
+                    "max_tokens": 200,
+                    "temperature": 0.9
+                },
+                timeout=30,
+                verify=False
+            )
+            data = resp.json()
+            # 检查 API 层面错误（限流、余额不足等）
+            if data.get("error"):
+                err_msg = str(data["error"].get("message", ""))[:80]
+                if any(kw in err_msg.lower() for kw in ["rate", "429", "credit", "limit", "quota"]):
+                    print(f"  ⏳ {tag}/{short_model} 限流，切换下一个")
+                    continue
+                print(f"  ❌ {tag}/{short_model}: {err_msg}")
+                continue
+            if data.get("choices") and data["choices"][0]:
+                msg_obj = data["choices"][0]["message"]
+                text = msg_obj.get("content")
+                # thinking 模型 content 可能为 None，fallback 到 reasoning
+                if not text:
+                    text = msg_obj.get("reasoning", "")
+                if not text:
+                    print(f"  ⚠️ {tag}/{short_model} content 为空，跳过")
+                    continue
+                text = text.strip()
+                text = re.sub(r'[*#`]', '', text)
+                text = text.strip('"\'\u201c\u201d\u2018\u2019')
+                text = text.replace("\n", " ")
+                print(f"  🤖 {tag}/{short_model}")
+                return text
+        except requests.Timeout:
+            print(f"  ⏱️ {tag}/{short_model} 超时")
+        except Exception as e:
+            print(f"  ❌ {tag}/{short_model}: {e}")
+
+    print("  💀 所有 provider 都失败了")
     return None
 
 if __name__ == "__main__":
