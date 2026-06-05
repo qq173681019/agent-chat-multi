@@ -6,23 +6,34 @@ const WebSocket = require('ws');
 const PORT = 3000;
 const DATA_DIR = path.join(__dirname, '../data');
 
-// 确保 data 目录存在
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-// 消息存储
 const messages = [];
 let msgId = 0;
-
 const agents = {
-  'agent-a': { name: 'Agent A (小呆)', online: false, ws: null },
-  'agent-b': { name: 'Agent B (同事)', online: false, ws: null }
+  'agent-a': { name: 'Agent A', online: false, ws: null },
+  'agent-b': { name: 'Agent B', online: false, ws: null }
 };
 const users = {};
 let userIdCounter = 0;
+const reactions = {};
+const typingState = {};
 
-// HTTP 服务
+// Load config
+let botConfig = {};
+try {
+  botConfig = JSON.parse(fs.readFileSync(path.join(__dirname, '../config.json'), 'utf-8'));
+  if (botConfig.botName) agents['agent-a'].name = botConfig.botName;
+} catch (e) {}
+
+// Helpers
+function broadcast(data) {
+  const raw = JSON.stringify(data);
+  const wssClients = module.exports?.wss?.clients;
+  if (wssClients) wssClients.forEach(c => { if (c.readyState === WebSocket.OPEN) c.send(raw); });
+}
+
 const server = http.createServer((req, res) => {
-  // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -30,36 +41,43 @@ const server = http.createServer((req, res) => {
 
   const url = new URL(req.url, `http://${req.headers.host}`);
 
-  // 前端页面
+  // Frontend
   if (url.pathname === '/' || url.pathname === '/index.html') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(fs.readFileSync(path.join(__dirname, '../public/index.html')));
     return;
   }
 
-  // 获取配置（前端用，不暴露 apiKey）
-  if (url.pathname === "/api/config") {
-    try {
-      const cfg = JSON.parse(fs.readFileSync(path.join(__dirname, "../config.json"), "utf-8"));
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ botName: cfg.botName || "🤖 Agent", model: cfg.model || "" }));
-    } catch (e) {
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ botName: "🤖 Agent", model: "" }));
-    }
-    return;
-  }
-  
-  // 获取待处理的 Agent 消息（轮询用）
-
-  // 获取当前在线的人类用户列表
-  if (url.pathname === "/api/online-users" && req.method === 'GET') {
-    const humanUsers = Object.values(users).filter(u => u.role === 'user');
+  // Config
+  if (url.pathname === '/api/config') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ users: humanUsers }));
+    res.end(JSON.stringify({
+      botName: botConfig.botName || '🤖 Agent',
+      model: botConfig.model || '',
+      mode: 'dual',
+      agentCount: 2,
+      agents: [
+        { id: 'agent-a', name: agents['agent-a'].name },
+        { id: 'agent-b', name: agents['agent-b'].name }
+      ]
+    }));
     return;
   }
 
+  // Health
+  if (url.pathname === '/api/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      status: 'ok', uptime: process.uptime(),
+      messageCount: messages.length, mode: 'dual',
+      agents: Object.entries(agents).map(([id, a]) => ({ id, name: a.name, online: a.online })),
+      users: Object.keys(users).length,
+      timestamp: Date.now()
+    }));
+    return;
+  }
+
+  // Poll
   if (url.pathname === '/api/poll' && req.method === 'GET') {
     const since = parseInt(url.searchParams.get('since') || '0');
     const pending = messages.filter(m => m.id > since && m.role !== 'system');
@@ -68,7 +86,7 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Agent 通过 API 发送回复
+  // Reply (agent API)
   if (url.pathname === '/api/reply' && req.method === 'POST') {
     let body = '';
     req.on('data', c => body += c);
@@ -76,101 +94,105 @@ const server = http.createServer((req, res) => {
       try {
         const data = JSON.parse(body);
         msgId++;
-        const reply = { id: msgId, from: data.from || '小呆', fromId: 'openclaw', role: data.role || 'agent-a', content: data.content, time: Date.now() };
+        const reply = { id: msgId, from: data.from || 'Agent', fromId: 'openclaw', role: data.role || 'agent-a', content: data.content, time: Date.now() };
         messages.push(reply);
-        broadcast({ type: 'message', ...reply });
+        if (messages.length > 500) messages.shift();
         
-        // 如果有另一个 Agent 在线，也通知它
+        // Update agent state
+        if (agents[reply.role]) agents[reply.role].online = true;
+        
+        // Clear typing
+        if (typingState[reply.role]) { clearTimeout(typingState[reply.role]); delete typingState[reply.role]; broadcast({ type: 'typing', agentId: reply.role, agentName: agents[reply.role]?.name, isTyping: false }); }
+        
+        broadcast({ type: 'message', ...reply });
+
+        // Notify other agent
         const otherRole = reply.role === 'agent-a' ? 'agent-b' : 'agent-a';
         const otherAgent = agents[otherRole];
-        if (otherAgent && otherAgent.ws && otherAgent.ws.readyState === WebSocket.OPEN) {
-          setTimeout(() => {
-            otherAgent.ws.send(JSON.stringify({ type: 'agent_query', message: reply, agent_role: otherRole }));
-          }, 2000);
+        if (otherAgent?.ws?.readyState === WebSocket.OPEN) {
+          setTimeout(() => otherAgent.ws.send(JSON.stringify({ type: 'agent_query', message: reply, agent_role: otherRole })), 2000);
         }
-        
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true, id: msgId }));
-      } catch (e) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: e.message }));
-      }
+      } catch (e) { res.writeHead(400); res.end(JSON.stringify({ error: e.message })); }
     });
     return;
   }
 
-  // 获取消息
+  // Typing
+  if (url.pathname === '/api/typing' && req.method === 'POST') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      try {
+        const data = JSON.parse(body);
+        const role = data.role || data.agentId;
+        broadcast({ type: 'typing', agentId: role, agentName: agents[role]?.name || data.from, isTyping: data.isTyping !== false });
+        if (data.isTyping !== false) {
+          if (typingState[role]) clearTimeout(typingState[role]);
+          typingState[role] = setTimeout(() => broadcast({ type: 'typing', agentId: role, agentName: agents[role]?.name, isTyping: false }), 10000);
+        }
+        res.writeHead(200); res.end(JSON.stringify({ ok: true }));
+      } catch(e) { res.writeHead(400); res.end(JSON.stringify({ error: e.message })); }
+    });
+    return;
+  }
+
+  // Search
+  if (url.pathname === '/api/search' && req.method === 'GET') {
+    const q = (url.searchParams.get('q') || '').toLowerCase();
+    const limit = Math.min(parseInt(url.searchParams.get('limit') || '20'), 50);
+    if (!q) { res.writeHead(400); res.end(JSON.stringify({ error: 'Missing q' })); return; }
+    const results = messages.filter(m => m.content?.toLowerCase().includes(q)).slice(-limit);
+    res.writeHead(200); res.end(JSON.stringify({ results, total: results.length }));
+    return;
+  }
+
+  // Messages
   if (url.pathname === '/api/messages') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ messages: messages.slice(-100) }));
     return;
   }
 
-  // 导出聊天记录
+  // Online users
+  if (url.pathname === '/api/online-users') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ users: Object.values(users).filter(u => u.role === 'user') }));
+    return;
+  }
+
+  // Export
   if (url.pathname === '/api/export' && req.method === 'POST') {
     let body = '';
     req.on('data', c => body += c);
     req.on('end', () => {
       try {
         const { name } = JSON.parse(body);
-        if (messages.length === 0) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: '没有聊天记录可导出' }));
-          return;
-        }
+        if (!messages.length) { res.writeHead(400); res.end(JSON.stringify({ error: '没有记录' })); return; }
         const filename = (name || 'chat') + '_' + new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19) + '.json';
-        const filepath = path.join(DATA_DIR, filename);
-        const exportData = {
-          name: name || '未命名',
-          exportTime: Date.now(),
-          messageCount: messages.length,
-          messages: messages.map(m => ({ ...m }))
-        };
-        fs.writeFileSync(filepath, JSON.stringify(exportData, null, 2), 'utf-8');
-
-        // 清空内存中的消息
+        fs.writeFileSync(path.join(DATA_DIR, filename), JSON.stringify({ name: name || '未命名', mode: 'dual', exportTime: Date.now(), messageCount: messages.length, messages }, null, 2), 'utf-8');
         const count = messages.length;
-        messages.length = 0;
-        msgId = 0;
-
-        // 通知所有客户端聊天记录已清空
-        broadcast({ type: 'cleared', content: `导出了 ${count} 条消息 → ${filename}`, time: Date.now() });
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, filename, count }));
-      } catch (e) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: e.message }));
-      }
+        messages.length = 0; msgId = 0;
+        broadcast({ type: 'cleared', content: `导出 ${count} 条 → ${filename}`, time: Date.now() });
+        res.writeHead(200); res.end(JSON.stringify({ ok: true, filename, count }));
+      } catch (e) { res.writeHead(500); res.end(JSON.stringify({ error: e.message })); }
     });
     return;
   }
 
-  // 获取已保存的聊天记录列表
+  // Archives
   if (url.pathname === '/api/archives') {
     try {
       const files = fs.readdirSync(DATA_DIR).filter(f => f.endsWith('.json')).sort().reverse();
-      const archives = files.map(f => {
-        try {
-          const data = JSON.parse(fs.readFileSync(path.join(DATA_DIR, f), 'utf-8'));
-          return {
-            filename: f,
-            name: data.name,
-            exportTime: data.exportTime,
-            messageCount: data.messageCount
-          };
-        } catch { return null; }
-      }).filter(Boolean);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ archives }));
-    } catch (e) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: e.message }));
-    }
+      const archives = files.map(f => { try { const d = JSON.parse(fs.readFileSync(path.join(DATA_DIR, f), 'utf-8')); return { filename: f, name: d.name, exportTime: d.exportTime, messageCount: d.messageCount }; } catch { return null; } }).filter(Boolean);
+      res.writeHead(200); res.end(JSON.stringify({ archives }));
+    } catch (e) { res.writeHead(500); res.end(JSON.stringify({ error: e.message })); }
     return;
   }
 
-  // 导入聊天记录
+  // Import
   if (url.pathname === '/api/import' && req.method === 'POST') {
     let body = '';
     req.on('data', c => body += c);
@@ -178,23 +200,15 @@ const server = http.createServer((req, res) => {
       try {
         const { filename } = JSON.parse(body);
         const filepath = path.join(DATA_DIR, filename);
-        if (!fs.existsSync(filepath)) {
-          res.writeHead(404, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: '文件不存在' }));
-          return;
-        }
+        if (!fs.existsSync(filepath)) { res.writeHead(404); res.end(JSON.stringify({ error: '不存在' })); return; }
         const data = JSON.parse(fs.readFileSync(filepath, 'utf-8'));
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, messages: data.messages || [], name: data.name }));
-      } catch (e) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: e.message }));
-      }
+        res.writeHead(200); res.end(JSON.stringify({ ok: true, messages: data.messages || [], name: data.name }));
+      } catch (e) { res.writeHead(500); res.end(JSON.stringify({ error: e.message })); }
     });
     return;
   }
 
-  // 删除存档
+  // Delete archive
   if (url.pathname === '/api/archive/delete' && req.method === 'POST') {
     let body = '';
     req.on('data', c => body += c);
@@ -203,22 +217,28 @@ const server = http.createServer((req, res) => {
         const { filename } = JSON.parse(body);
         const filepath = path.join(DATA_DIR, filename);
         if (fs.existsSync(filepath)) fs.unlinkSync(filepath);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true }));
-      } catch (e) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: e.message }));
-      }
+        res.writeHead(200); res.end(JSON.stringify({ ok: true }));
+      } catch (e) { res.writeHead(500); res.end(JSON.stringify({ error: e.message })); }
     });
     return;
   }
 
-  res.writeHead(404);
-  res.end('not found');
+  // Clear
+  if (url.pathname === '/api/clear' && req.method === 'POST') {
+    const count = messages.length;
+    messages.length = 0; msgId = 0;
+    Object.keys(reactions).forEach(k => delete reactions[k]);
+    broadcast({ type: 'cleared', content: `清空了 ${count} 条消息`, time: Date.now() });
+    res.writeHead(200); res.end(JSON.stringify({ ok: true, cleared: count }));
+    return;
+  }
+
+  res.writeHead(404); res.end('not found');
 });
 
 // WebSocket
 const wss = new WebSocket.Server({ server });
+module.exports.wss = wss;
 
 wss.on('connection', (ws) => {
   let currentUser = null;
@@ -233,9 +253,9 @@ wss.on('connection', (ws) => {
           ws.user = currentUser;
           ws.send(JSON.stringify({ type: 'history', messages: messages.slice(-50) }));
           broadcast({ type: 'system', content: `${currentUser.name} 加入了聊天`, time: Date.now() });
-          if (currentUser.role === 'agent-a' || currentUser.role === 'agent-b') {
-            agents[currentUser.role].online = true;
-            agents[currentUser.role].ws = ws;
+          if (data.role === 'agent-a' || data.role === 'agent-b') {
+            agents[data.role].online = true;
+            agents[data.role].ws = ws;
           }
           break;
         case 'message':
@@ -247,7 +267,7 @@ wss.on('connection', (ws) => {
           broadcast({ type: 'message', ...msg });
           if (currentUser.role === 'user') {
             Object.values(agents).forEach(agent => {
-              if (agent.ws && agent.ws.readyState === WebSocket.OPEN) {
+              if (agent.ws?.readyState === WebSocket.OPEN) {
                 agent.ws.send(JSON.stringify({ type: 'agent_query', message: msg, agent_role: agent === agents['agent-a'] ? 'agent-a' : 'agent-b' }));
               }
             });
@@ -259,41 +279,31 @@ wss.on('connection', (ws) => {
           const reply = { id: msgId, from: currentUser.name, fromId: currentUser.id, role: currentUser.role, content: data.content, replyTo: data.replyTo || null, time: Date.now() };
           messages.push(reply);
           broadcast({ type: 'message', ...reply });
-          // 通知另一个 Agent（AI 对 AI 对话）
           const otherRole = currentUser.role === 'agent-a' ? 'agent-b' : 'agent-a';
           const otherAgent = agents[otherRole];
-          if (otherAgent && otherAgent.ws && otherAgent.ws.readyState === WebSocket.OPEN) {
-            // 延迟2秒，避免两个 AI 无限互聊
-            setTimeout(() => {
-              otherAgent.ws.send(JSON.stringify({
-                type: 'agent_query',
-                message: reply,
-                agent_role: otherRole
-              }));
-            }, 2000);
+          if (otherAgent?.ws?.readyState === WebSocket.OPEN) {
+            setTimeout(() => otherAgent.ws.send(JSON.stringify({ type: 'agent_query', message: reply, agent_role: otherRole })), 2000);
           }
           break;
       }
-    } catch (e) { console.error('消息解析错误:', e.message); }
+    } catch (e) { console.error('Parse error:', e.message); }
   });
 
   ws.on('close', () => {
     if (currentUser) {
-      if (currentUser.role === 'agent-a' || currentUser.role === 'agent-b') {
-        agents[currentUser.role].online = false;
-        agents[currentUser.role].ws = null;
-      }
+      if (agents[currentUser.role]) { agents[currentUser.role].online = false; agents[currentUser.role].ws = null; }
       delete users[currentUser.id];
       broadcast({ type: 'system', content: `${currentUser.name} 离开了聊天`, time: Date.now() });
     }
   });
 });
 
-function broadcast(data) {
-  const raw = JSON.stringify(data);
-  wss.clients.forEach(client => { if (client.readyState === WebSocket.OPEN) client.send(raw); });
-}
-
 server.listen(PORT, '::', () => {
-  console.log(`\n╔══════════════════════════════════════╗\n║   Agent Chat Server                  ║\n║   http://localhost:${PORT}              ║\n╚══════════════════════════════════════╝\n`);
+  console.log(`
+╔══════════════════════════════════════╗
+║   🤖 Agent Chat Server v2.0          ║
+║   http://localhost:${PORT}              ║
+║   Mode: Dual Agent                   ║
+╚══════════════════════════════════════╝
+  `);
 });

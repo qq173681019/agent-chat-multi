@@ -1,6 +1,12 @@
 node_modules/
 data/
 *.log
+*.pid
 .DS_Store
 .env
 config.json
+cloudflared.exe
+.poller_*_lastid
+__pycache__/
+*.pyc
+ws-url.json
