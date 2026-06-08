@@ -6,6 +6,37 @@ const path = require('path');
 const configPath = path.join(__dirname, '../config.json');
 const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
 
+// ===== secrets 注入 (2026-06-07) =====
+function loadSecrets() {
+  const fs2 = require('fs'), path2 = require('path'), os = require('os');
+  const candidates = [
+    process.env.AGENT_CHAT_SECRETS,
+    path2.join(os.homedir(), '.agent-chat-secrets.json'),
+    path2.join(__dirname, '..', 'secrets.json'),
+  ];
+  for (const p of candidates) {
+    if (!p) continue;
+    try {
+      if (fs2.existsSync(p)) {
+        const s = JSON.parse(fs2.readFileSync(p, 'utf-8'));
+        if (s.apiKey) return s;
+      }
+    } catch (e) { /* 静默失败 */ }
+  }
+  return null;
+}
+const _secrets = loadSecrets();
+if (_secrets) {
+  if (!config.apiKey && _secrets.apiKey) config.apiKey = _secrets.apiKey;
+  if (!config.apiBase && _secrets.apiBase) config.apiBase = _secrets.apiBase;
+}
+if (!config.apiKey) {
+  console.error('[FATAL] apiKey 未配置。放到 ~/.agent-chat-secrets.json 或设环境变量 AGENT_CHAT_SECRETS');
+  process.exit(1);
+}
+// ===== end secrets =====
+
+
 const SERVER_URL = config.serverUrl || `ws://localhost:${config.serverPort || 3000}`;
 const BOT_NAME = config.botName || '🤖 小呆';
 const BOT_ROLE = config.botRole || 'agent-a';

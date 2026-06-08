@@ -24,6 +24,38 @@ LAST_ID_FILE = os.path.join(DATA_DIR, "last_id.txt")
 PROCESSED_FILE = os.path.join(DATA_DIR, "processed_ids.json")
 PID_FILE = os.path.join(DATA_DIR, "daemon.pid")
 POLL_INTERVAL = 30
+
+# ===== secrets 注入 (2026-06-07) =====
+def load_secrets():
+    import os, json
+    candidates = [
+        os.environ.get("AGENT_CHAT_SECRETS"),
+        os.path.join(os.path.expanduser("~"), ".agent-chat-secrets.json"),
+        os.path.join(os.path.dirname(__file__), "secrets.json"),
+    ]
+    for p in candidates:
+        if not p:
+            continue
+        try:
+            if os.path.exists(p):
+                with open(p, "r", encoding="utf-8") as f:
+                    s = json.load(f)
+                if s.get("apiKey"):
+                    return s
+        except Exception:
+            pass
+    return None
+
+_SECRETS = load_secrets()
+if _SECRETS:
+    API_KEY = _SECRETS.get("apiKey", API_KEY)
+    API_BASE = _SECRETS.get("apiBase", API_BASE)
+if not API_KEY:
+    print("[FATAL] apiKey 未配置。放到 ~/.agent-chat-secrets.json 或设环境变量 AGENT_CHAT_SECRETS", file=sys.stderr)
+    sys.exit(1)
+# ===== end secrets =====
+
+
 HERMES_BIN = os.environ.get("HERMES_BIN", "hermes")
 
 running = True
