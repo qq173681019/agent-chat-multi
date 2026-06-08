@@ -1,12 +1,26 @@
+# Dependencies
 node_modules/
 data/
 *.log
-*.pid
 .DS_Store
 .env
+
+# Local configs (secrets — keep out of repo)
 config.json
+config-b.json
 cloudflared.exe
+cloudflared-token.txt
 .poller_*_lastid
+ws-url.json
+.bak-preagentchat
+*.bak-preagentchat
+*.bak-20260606-*
+
+# Secrets (推荐放在仓库外，比如 ~/.agent-chat-secrets.json)
+.agent-chat-secrets.json
+secrets.json
+*secrets*.json
+
+# Python
 __pycache__/
 *.pyc
-ws-url.json

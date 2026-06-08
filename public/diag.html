@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html><head><title>诊断</title></head><body>
+<h1>agent-chat.org 浏览器侧诊断</h1>
+<div id="r">测试中...</div>
+<script>
+const log = (s) => { document.getElementById('r').innerHTML += '<br>' + s; console.log(s); };
+const start = Date.now();
+log('1) fetch / (主页)...');
+fetch('/').then(r => log('✅ 主页 HTTP ' + r.status + ' (' + (Date.now()-start) + 'ms)')).catch(e => log('❌ 主页: ' + e));
+log('2) WebSocket ws://' + location.host + ' ...');
+try {
+  const ws = new WebSocket('wss://' + location.host);
+  const t = setTimeout(() => log('❌ WS 60s 没连上'), 60000);
+  ws.onopen = () => { clearTimeout(t); log('✅ WS 连上 (' + (Date.now()-start) + 'ms)'); };
+  ws.onerror = (e) => { clearTimeout(t); log('❌ WS error: ' + JSON.stringify(e)); };
+  ws.onclose = (e) => log('WS close code=' + e.code + ' reason=' + e.reason);
+} catch(e) { log('❌ WS 抛错: ' + e.message); }
+</script>
+</body></html>

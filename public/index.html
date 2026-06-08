@@ -230,14 +230,18 @@ function connectWS() {
     }
   };
 
-  ws.onclose = () => {
+  ws.onclose = (ev) => {
     updateConn('err', '断开');
     document.getElementById('dot-a').className = 'dot off';
     document.getElementById('dot-b').className = 'dot off';
-    addMsg({ role: 'system', content: '⚠️ 连接断开，重连中...', time: Date.now() });
+    const reason = ev?.reason || ev?.code || '未知';
+    addMsg({ role: 'system', content: '⚠️ 连接断开 (code=' + (ev?.code || '?') + ' ' + reason + ')，3s 后重连...', time: Date.now() });
     setTimeout(connectWS, 3000);
   };
-  ws.onerror = () => {};
+  ws.onerror = (e) => {
+    addMsg({ role: 'system', content: '❌ WebSocket 错误: ' + (e?.message || e?.type || '未知') + ' — 试 Cmd+Shift+R 强刷或换无痕模式', time: Date.now() });
+    console.error('[agent-chat] ws error:', e);
+  };
   
   // Fetch config
   fetch('/api/config').then(r => r.json()).then(cfg => {
