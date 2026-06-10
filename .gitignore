@@ -24,3 +24,7 @@ secrets.json
 # Python
 __pycache__/
 *.pyc
+
+# 本地 cloudflared 二进制（不在 git 里追踪，去 https://github.com/cloudflare/cloudflared 下载）
+cloudflared
+cloudflared.exe
