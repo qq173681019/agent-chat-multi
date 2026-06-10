@@ -15,7 +15,7 @@ import signal
 import atexit
 
 # ============ 配置 ============
-VERCEL_URL = "https://agent-chat-d1m3.vercel.app"
+# 服务器地址：multi.agent-chat.org（多 Agent 项目，固定地址）
 BOT_NAME = "顾小狸的小胡子"
 BOT_ROLE = "agent-b"
 AGENT_A_ROLE = "agent-a"
@@ -79,16 +79,8 @@ atexit.register(cleanup)
 # ============ 工具函数 ============
 
 def get_server_url():
-    """动态获取当前 WebSocket 服务器地址"""
-    try:
-        resp = requests.get(f"{VERCEL_URL}/api/ws-url", timeout=10)
-        data = resp.json()
-        url = data.get("url", "")
-        if url:
-            return url
-    except Exception as e:
-        print(f"[地址] 获取失败: {e}")
-    return None
+    """固定地址：multi.agent-chat.org（多 Agent 项目，命名隧道）"""
+    return "https://multi.agent-chat.org"
 
 def get_last_id():
     try:
@@ -224,7 +216,7 @@ def main():
 ╔══════════════════════════════════════════╗
 ║  Agent Chat 守护进程 (Hermes)            ║
 ║  {BOT_NAME} (agent-b)               ║
-║  动态获取服务器地址                       ║
+║  固定地址 multi.agent-chat.org       ║
 ║  轮询: {POLL_INTERVAL}秒                  ║
 ╚══════════════════════════════════════════╝
 """)
@@ -237,12 +229,8 @@ def main():
     
     while running:
         try:
-            # 动态获取服务器地址（每轮都刷新，应对隧道变化）
+            # 固定地址（命名隧道，无需每轮刷新）
             server = get_server_url()
-            if not server:
-                print(f"[{time.strftime('%H:%M:%S')}] 无法获取服务器地址，等待重试...")
-                time.sleep(POLL_INTERVAL)
-                continue
             
             messages, new_last_id = poll_messages(server, last_id)
             

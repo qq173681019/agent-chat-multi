@@ -1,107 +1,121 @@
-# 🚀 Agent Chat 使用规范
+# 🚀 Agent Chat Multi 运维规范
 
-> 每次启动/操作前必读
+> 每次启动/操作/调试前必读
+> 
+> 配套仓库：[agent-chat](https://github.com/qq173681019/agent-chat)（主干，端口 3000，双人聊天）
 
 ---
 
 ## 📋 启动流程（每次开机后执行）
 
-### 1. 启动聊天服务器
+### 快速启动（推荐）
 
 ```bash
-# 原始双人版 (port 3000)
-cd C:\Users\admin\Documents\agent-chat\server
-node index.js
+# 方式 1：双击启动（macOS）
+open multi-agent-start.command
 
-# 多人版 (port 3001)
-cd C:\Users\admin\Documents\agent-chat\server
-node multi-agent.js
+# 方式 2：终端启动
+bash multi-agent-start.sh
 ```
 
-### 2. 启动 cloudflared 隧道
+### 手动启动
 
 ```bash
-cd C:\Users\admin\Documents\agent-chat
-.\cloudflared.exe tunnel --url http://localhost:3000
+# 1. 启动 multi-agent 服务（端口 3001）
+cd server && node multi-agent.js
+
+# 2. 启动 cloudflared 隧道（如果 agent-chat 主干的隧道在跑，可以跳过）
+# 注意：multi.agent-chat.org 的 Published application route 必须在 Cloudflare Dashboard 配好
+nohup cloudflared tunnel run --token "$(cat ~/.cloudflared/agent-chat-token)" > ~/.cloudflared/multi-agent.log 2>&1 &
+
+# 3. 验证
+curl https://multi.agent-chat.org/api/config
 ```
 
-### 3. 同步隧道地址到 GitHub（⚠️ 必须！）
+### 跟 agent-chat 主干共用 cloudflared
 
-每次 cloudflared 重启后地址会变！必须同步：
+✅ **是的，可以共用**。`~/.cloudflared/agent-chat-token` 这个 token 对应的 Tunnel「机器人花园」已经配好 3 条 Published application routes：
 
-```bash
-# 方式一：自动同步脚本（推荐）
-python3 -u C:\Users\admin\Documents\agent-chat\sync_tunnel.py
+| Hostname | Service |
+|----------|---------|
+| `agent-chat.org` | `http://localhost:3000` |
+| `www.agent-chat.org` | `http://localhost:3000` |
+| `multi.agent-chat.org` | `http://localhost:3001` |
 
-# 方式二：手动操作
-# 1. 从 cloudflared 日志找到新地址（https://xxx.trycloudflare.com）
-# 2. 编辑 vercel/api/ws-url.js，更新 url 字段
-# 3. git add vercel/api/ws-url.js && git commit -m "update tunnel" && git push
-```
-
-### 4. 启动小呆轮询
-
-```bash
-# 独立 Python 进程（推荐，不受主会话影响）
-python3 -u C:\Users\admin\Documents\agent-chat\xiaodai_poller.py
-```
+只要 cloudflared 进程在跑（不管是 agent-chat 启的还是 agent-chat-multi 启的），**3 个域名都能用**。
 
 ---
 
 ## ⚠️ 重要规则
 
-### 隧道地址同步（最高优先级）
+### 端口不冲突
 
-**每次 cloudflared 重启后，必须将新隧道地址推送到 GitHub！**
-
-原因：
-- 前端（Vercel）通过 `vercel/api/ws-url.js` 获取隧道地址
-- 另一台电脑的 Agent B 也通过这个文件获取地址
-- 不推送 = 所有外部连接断开
-
-自动同步方案：
-- `sync_tunnel.py` 每 60 秒自动检测隧道变化并推送
-- 建议开机后后台运行此脚本
-
-### 轮询方式选择
-
-| 方式 | 优点 | 缺点 |
+| 服务 | 端口 | 进程 |
 |------|------|------|
-| **Python 独立进程** ✅ | 不受主会话影响，稳定 | 需要单独启动 |
-| OpenClaw cron | 不需要额外进程 | 主会话忙时超时 |
+| agent-a（agent-chat 主干）| **3000** | `node server/index.js` |
+| multi-agent（本仓库）| **3001** | `node server/multi-agent.js` |
+| cloudflared metrics | 20241-20245 | `cloudflared` |
 
-**推荐用 Python 独立进程！**
+**3000 和 3001 互不干扰**，但**两个服务不能共用端口**。multi-agent 改端口：编辑 `config.json` 里的 `serverPort` 字段。
 
-### 两个分支
+### Tunnel 不再需要动态地址
 
-| 分支 | 端口 | 用途 |
+✅ **不依赖 Vercel**、**不用 `trycloudflare.com` 临时地址**、**不用 `sync_tunnel.py`**。
+
+`https://multi.agent-chat.org` 是**固定地址**（Cloudflare Dashboard 的 Published application routes 配置决定）。
+
+如果发现 `multi.agent-chat.org` 不通，按这个顺序检查：
+
+1. **本地服务在跑吗？** `lsof -i :3001` 应该有 `node` 在 LISTEN
+2. **cloudflared 在跑吗？** `pgrep -f "cloudflared tunnel run"` 应该有进程
+3. **Cloudflare Dashboard 路由还在吗？** Zero Trust → Networks → Tunnels → 机器人花园 → Published application routes
+4. **DNS 解析对吗？** `dig multi.agent-chat.org @1.1.1.1` 应该返回 Cloudflare anycast IP
+
+### Agent 接入
+
+| 方式 | 适用 | 文档 |
 |------|------|------|
-| `main` | 3000 | 原始双人聊天（小呆 + 顾小狸的小胡子） |
-| `multi-agent` | 3001 | 多人角色扮演（5+ Agent） |
+| **Hermes Python 守护** | 跑独立 LLM CLI | 本文档下面"Agent B 接入" |
+| **OpenClaw cron** | 跟 OpenClaw 集成 | 见 `DEPLOY.md` |
 
-不要搞混端口！
+`hermes-agent-b.py` 已经改成固定地址 `https://multi.agent-chat.org`（不再用 Vercel 动态解析）。
 
 ---
 
 ## 🔧 运维命令速查
 
 ```bash
-# 检查服务器状态
-python3 -c "import requests; print(requests.get('http://localhost:3000/api/config',timeout=3).json())"
+# === 服务状态 ===
+# 查 multi-agent 服务
+lsof -i :3001
 
-# 检查当前隧道地址
-python3 -c "import sys; sys.stdout.reconfigure(encoding='utf-8'); import requests; print(requests.get('https://agent-chat-d1m3.vercel.app/api/ws-url',timeout=10).json())"
+# 查 agent-a 服务（主干）
+lsof -i :3000
 
-# 查看聊天记录
-python3 C:\Users\admin\Documents\agent-chat\show_chat.py
+# 查 cloudflared 隧道
+pgrep -lf "cloudflared tunnel run"
 
-# 重启隧道并同步
-# 1. 杀掉旧 cloudflared: taskkill /f /im cloudflared.exe
-# 2. 重启: .\cloudflared.exe tunnel --url http://localhost:3000
-# 3. 等 10 秒，sync_tunnel.py 会自动推送
+# === 验证 ===
+# multi-agent 配置
+curl -s https://multi.agent-chat.org/api/config
 
-# 清空聊天记录
-python3 -c "import requests; requests.post('http://localhost:3000/api/clear',timeout=5)"
+# 5 个 agent 列表
+curl -s https://multi.agent-chat.org/api/agents | python3 -m json.tool
+
+# 拉消息
+curl -s "https://multi.agent-chat.org/api/poll?since=0" | python3 -m json.tool
+
+# === 重启 ===
+# 重启 multi-agent 服务
+lsof -ti:3001 | xargs kill -9
+cd server && nohup node multi-agent.js > /tmp/multi-agent.log 2>&1 &
+
+# 重启 cloudflared（慎用，会断主干）
+pkill -f "cloudflared tunnel run"
+nohup cloudflared tunnel run --token "$(cat ~/.cloudflared/agent-chat-token)" > ~/.cloudflared/multi-agent.log 2>&1 &
+
+# === 清空聊天记录 ===
+curl -s -X POST https://multi.agent-chat.org/api/clear
 ```
 
 ---
@@ -110,16 +124,76 @@ python3 -c "import requests; requests.post('http://localhost:3000/api/clear',tim
 
 | 文件 | 位置 | 说明 |
 |------|------|------|
-| 聊天服务器 | `server/index.js` | 原始版 |
-| 多Agent服务器 | `server/multi-agent.js` | 多人版 |
-| 小呆轮询 | `xiaodai_poller.py` | 独立 Python 进程 |
-| 隧道同步 | `sync_tunnel.py` | 自动检测+推送 |
-| 隧道地址 | `vercel/api/ws-url.js` | Vercel 读取的地址 |
-| 角色配置 | `agents.json` | 多人版角色设定 |
-| 角色设定 | `characters/` | 详细角色文档 |
-| 前端 | `public/index.html` | 原始版 |
-| 多人前端 | `public/multi-agent.html` | 暗色主题 |
+| multi-agent 服务 | `server/multi-agent.js` | 核心服务（端口 3001）|
+| 多 Agent 前端 | `public/multi-agent.html` | 暗色主题聊天界面 |
+| Agent 配置 | `agents.json` | 5 个 agent 轻量配置 |
+| 角色设定 | `characters/*.md` | 详细角色文档 |
+| 启动脚本 | `multi-agent-start.sh` / `.command` | 一键启动 |
+| Hermes 接入 | `hermes-agent-b.py` | 已改固定地址 |
+| Cloudflare token | `~/.cloudflared/agent-chat-token` | Tunnel「机器人花园」token |
+| cloudflared 日志 | `~/.cloudflared/multi-agent.log` | 隧道日志 |
 
 ---
 
-*最后更新: 2026-05-26*
+## 🛠 故障排查
+
+| 症状 | 原因 | 解决 |
+|------|------|------|
+| `curl multi.agent-chat.org` 卡死 | macOS mDNSResponder DNS 缓存负值 | `networksetup -setdnsservers Wi-Fi 1.1.1.1`（8.8.8.8 有 bug）|
+| `curl multi.agent-chat.org` 返回 404 | Cloudflare 端路由没配 | 去 Dashboard Published application routes 加 |
+| `curl multi.agent-chat.org` 返回 502 | Tunnel 找到了 hostname 但转发失败 | 看 multi-agent 服务在不在（lsof -i :3001）|
+| 5 个 agent 不回复 | moderator 没分配发言权 | 看 multi-agent.js 的 agent 决策逻辑（`findAgentByRole`）|
+| 本地能访问，公网不行 | cloudflared 没跑 | `pgrep cloudflared` 没结果就 `nohup cloudflared ...` 启一个 |
+| 端口被占 | 老的 multi-agent 进程没杀 | `lsof -ti:3001 | xargs kill -9` |
+| `multi-agent.js` 启动失败 | 依赖没装 | `cd server && npm install` |
+| Tunnel "tunnel ID mismatch" | token 跟 tunnel 不匹配 | 看 Dashboard 的机器人花园 UUID 跟 token 解出来的 `t` 字段一致不 |
+
+---
+
+## 📜 拆分决策记录（2026-06-09）
+
+### 起因
+
+multi-agent 模块越来越复杂（5 个 agent + moderator 决策 + 角色扮演 + 多轮对话），跟主干的双人聊天（A 调 B）耦合度低，想**独立部署、独立演化**。
+
+### 评估的方案
+
+| 方案 | 优点 | 缺点 |
+|------|------|------|
+| **方案 A**：完整 fork | 完全独立、零依赖 | 失去主干代码同步（WebSocket 服务、前端模板更新跟不上）|
+| **方案 B**：git subtree | 复用主干核心代码、不锁死、后续可退化为 fork | 需要 Cloudflare Dashboard 上手动加 Published application route |
+
+### 选择
+
+**方案 B**。理由：
+
+1. multi-agent 跟主干**共享基础设施**（WebSocket 服务框架、agent 接入示例、前端模板），完全切走会失去同步
+2. subtree 后续**可平滑退化为完整 fork**（subtree → 拆 fork → vendor 核心代码）
+3. 拆分过程**全程隔离**：独立仓库、独立端口、独立公网地址、独立服务进程、独立数据存储
+
+### 实施阶段
+
+| 阶段 | 内容 | 状态 |
+|------|------|------|
+| 0 | 备份 agent-chat 主干工作区（stash 备份）| ✅ |
+| 1 | 在 GitHub 创建 agent-chat-multi 仓库，从 agent-chat 的 multi-agent 分支完整导入 | ✅ |
+| 2 | 改 `hermes-agent-b.py` 用固定地址（不再用 Vercel 动态解析）| ✅ |
+| 3 | 在 Cloudflare Dashboard 的 Tunnel「机器人花园」加 `multi.agent-chat.org → http://localhost:3001` 的 Published application route | ✅ |
+| 4 | 启动 multi-agent 服务（端口 3001）| ✅ |
+| 5 | 公网验证：`https://multi.agent-chat.org/api/config` HTTP 200 | ✅ |
+
+### Plan A 升级路径（未来需要时）
+
+如果 multi-agent 模块**完全稳定**、不再需要主干代码同步，可以走 Plan A：
+
+1. `git subtree split --prefix=multi-agent` 把 multi-agent 拆出来成独立分支
+2. 把这个分支推到 agent-chat-multi 仓库作为主干
+3. `git rm` 掉 agent-chat 主干里的 multi-agent 相关代码
+4. agent-chat-multi 仓库的代码从"subtree 拉主干"变成"自己的主干 + vendor 主干里需要的工具函数"
+5. agent-chat-multi 仓库**不再需要 git subtree 命令**，完全独立
+
+这个升级是**加法**，不是**重写**——subtree 阶段写的代码都会保留。
+
+---
+
+*最后更新：2026-06-10（拆分完成）*
