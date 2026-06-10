@@ -42,22 +42,24 @@ def load_agents():
     with open(AGENTS_JSON, 'r', encoding='utf-8') as f:
         return json.load(f)
 
-def get_server_url():
-    """优先从本地配置获取，fallback 到 Vercel API"""
-    try:
-        r = requests.get("https://agent-chat-d1m3.vercel.app/api/ws-url", timeout=10)
-        return r.json().get("url", "")
-    except:
-        return "http://localhost:3001"
+# 服务器地址：固定走 multi.agent-chat.org（独立仓库，独立隧道）
+# 不再依赖 Vercel 动态地址（Vercel 是老主干 agent-chat 的部署，已废弃）
+SERVER_URL = "https://multi.agent-chat.org"
 
-def poll(server, since=0):
-    r = requests.get(f"{server}/api/poll?since={since}", timeout=10)
+def get_server_url():
+    """固定地址: https://multi.agent-chat.org"""
+    return SERVER_URL
+
+def poll(since=0):
+    """轮询消息（不带 server 参数，固定用 SERVER_URL）"""
+    r = requests.get(f"{SERVER_URL}/api/poll?since={since}", timeout=10, verify=False)
     return r.json()
 
-def send_reply(server, agent_id, agent_name, content):
-    r = requests.post(f"{server}/api/reply",
+def send_reply(agent_id, agent_name, content):
+    """发送回复（不带 server 参数，固定用 SERVER_URL）"""
+    r = requests.post(f"{SERVER_URL}/api/reply",
         json={"from": agent_name, "role": agent_id, "content": content},
-        timeout=10)
+        timeout=10, verify=False)
     return r.json()
 
 def should_reply(messages, agent_id, last_processed_id):
@@ -194,8 +196,7 @@ def main():
 
     while running:
         try:
-            server = get_server_url()
-            data = poll(server, last_id)
+            data = poll(last_id)
             msgs = data.get("messages", [])
             new_last_id = data.get("lastId", last_id)
             
@@ -208,19 +209,22 @@ def main():
                     print(f"[{ts()}] 📨 {from_name}: {content}...")
                     
                     # 构建上下文
-                    all_msgs = poll(server, 0).get("messages", [])
+                    all_msgs = poll(0).get("messages", [])
                     prompt = build_prompt(agent, target, all_msgs)
                     
-                    # 通过 OpenClaw CLI 调用模型（或直接 API）
-                    # 这里简化：直接用 requests 调智谱 API
+                    # 调用 LLM
                     reply_text = call_model_direct(agent, prompt)
                     
                     if reply_text:
-                        result = send_reply(server, agent_id, name, reply_text)
+                        result = send_reply(agent_id, name, reply_text)
                         if result.get("ok"):
                             print(f"[{ts()}] ✅ {reply_text[:50]}")
                         else:
                             print(f"[{ts()}] ❌ 发送失败")
+                        
+                        # 回复后重新 poll 拿最新 last_id（因为 send_reply 会增加消息 ID）
+                        latest = poll(last_id)
+                        new_last_id = latest.get("lastId", new_last_id)
             
             # 保存 last_id
             last_id = new_last_id
