@@ -18,6 +18,25 @@ try {
 const PORT = config.serverPort || 3001;
 const MAX_MESSAGES = config.maxMessages || 1000;
 const REPLY_DELAY = config.replyDelay || 3000;
+
+// ===== 2026-06-13 16:25: 互聊风暴护栏 (server 端限流) =====
+// 上一轮 5 bot 互聊风暴把 minimax RPM 打爆 (2062 限流), 加 3 重护栏:
+// 1. 每 bot 最小间隔 AGENT_MIN_INTERVAL (ms) — 同一 bot 上条还没发完, 下一条 agent_query 排队
+// 2. 全群总并发 LLM 调用 ≤ AGENT_MAX_PARALLEL — 超过排队
+// 3. 互聊触发概率 BOT_REPLY_PROB — bot 收到的 agent_query, 只有这个概率再触发其他 bot
+//    (user 消息 100% 触发第一次 bot 互聊, bot 互聊结果只 50% 触发二次互聊, 防止指数)
+// 2026-06-13 16:35: 调护栏 — 平衡 5 bot 互聊节奏
+// - 间隔 12s (1 bot 最小间隔, 含 LLM 思考 + 查数据)
+// - 并发 2 (允许 2 bot 同时说话, 不会堆量爆 RPM)
+// - 互聊概率 0.5 (一半 bot 消息触发二次互聊)
+// - 5 bot 一轮 ≈ 30s (12s × 5 / 2 并发) 符合 "15-30 秒聊一句"
+const AGENT_MIN_INTERVAL = config.agentMinInterval || 12000;
+const AGENT_MAX_PARALLEL = config.agentMaxParallel || 2;
+const BOT_REPLY_PROB = config.botReplyProb || 0.5;
+
+const agentLastReplyAt = {};   // agentId -> ms timestamp of last agent_query SENT
+let agentInflight = 0;          // 当前在飞 LLM 数
+const agentReplyQueue = [];     // 排队: {agentId, msg, resolve}
 const MAX_TURNS = config.maxTurnsPerTopic || 10;
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -69,6 +88,54 @@ function shouldAgentReply(agentId) {
   const last3 = messages.slice(-3);
   const selfRecent = last3.filter(m => m.role === agentId).length;
   return selfRecent < 2;
+}
+
+// 2026-06-13 16:25: 排队器 — 满足 3 条件才发 agent_query: bot 间隔够 + 总并发不超 + 概率过
+function tryEnqueueAgentQuery(targetAgentId, msg) {
+  const now = Date.now();
+  const last = agentLastReplyAt[targetAgentId] || 0;
+  const wait = AGENT_MIN_INTERVAL - (now - last);
+  const enqueue = () => {
+    agentLastReplyAt[targetAgentId] = Date.now();
+    const state = agentState[targetAgentId];
+    if (state?.ws && state.ws.readyState === WebSocket.OPEN) {
+      state.ws.send(JSON.stringify({ type: 'agent_query', message: msg }));
+    }
+    // 2026-06-13 16:25: 自动释放并发 (LLM 调大概 1-3s, 8s 后兜底释放)
+    setTimeout(releaseInflight, 15000);  // 2026-06-13 16:35: 12s 间隔 + 3s buffer
+  };
+  if (wait > 0) {
+    // 排队等够间隔
+    setTimeout(() => {
+      // 再过一次并发闸门
+      if (agentInflight >= AGENT_MAX_PARALLEL) {
+        agentReplyQueue.push({ agentId: targetAgentId, msg, enqueue });
+        drainQueue();
+      } else {
+        agentInflight++;
+        enqueue();
+      }
+    }, wait);
+  } else {
+    if (agentInflight >= AGENT_MAX_PARALLEL) {
+      agentReplyQueue.push({ agentId: targetAgentId, msg, enqueue });
+      drainQueue();
+    } else {
+      agentInflight++;
+      enqueue();
+    }
+  }
+}
+function drainQueue() {
+  while (agentReplyQueue.length > 0 && agentInflight < AGENT_MAX_PARALLEL) {
+    const job = agentReplyQueue.shift();
+    agentInflight++;
+    setTimeout(job.enqueue, 50);
+  }
+}
+function releaseInflight() {
+  agentInflight = Math.max(0, agentInflight - 1);
+  drainQueue();
 }
 
 function broadcast(data) {
@@ -319,14 +386,13 @@ const server = http.createServer((req, res) => {
         broadcast({ type: 'message', ...msg });
 
         // 通知其他 agent（带延迟，防止互聊风暴）
+        // 2026-06-13 16:25: 用护栏 (tryEnqueueAgentQuery) 替 setTimeout 直发
+        // - 同 bot 8s 内不重复
+        // - 全群并发 ≤ 2
+        // - 但 /api/reply 是 user 主动推, 100% 触发第一次互聊
         getAgents().forEach(other => {
           if (other.id === agent.id) return;
-          const state = agentState[other.id];
-          if (state?.ws && state.ws.readyState === WebSocket.OPEN) {
-            setTimeout(() => {
-              state.ws.send(JSON.stringify({ type: 'agent_query', message: msg }));
-            }, REPLY_DELAY);
-          }
+          tryEnqueueAgentQuery(other.id, msg);
         });
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -362,14 +428,9 @@ const server = http.createServer((req, res) => {
 
         broadcast({ type: 'message', ...msg });
 
-        // 通知所有 agent
+        // 2026-06-13 16:25: 改 tryEnqueueAgentQuery (护栏 + 概率)
         getAgents().forEach(agent => {
-          const state = agentState[agent.id];
-          if (state?.ws && state.ws.readyState === WebSocket.OPEN) {
-            setTimeout(() => {
-              state.ws.send(JSON.stringify({ type: 'agent_query', message: msg }));
-            }, REPLY_DELAY);
-          }
+          if (Math.random() < BOT_REPLY_PROB) tryEnqueueAgentQuery(agent.id, msg);
         });
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -560,14 +621,10 @@ wss.on('connection', (ws) => {
 
           broadcast({ type: 'message', ...msg });
 
-          // 通知 agents
+          // 2026-06-13 16:25: 改 tryEnqueueAgentQuery (护栏 + 概率)
           getAgents().forEach(agent => {
-            const state = agentState[agent.id];
-            if (state?.ws && state.ws.readyState === WebSocket.OPEN && agent.id !== currentUser.role) {
-              setTimeout(() => {
-                state.ws.send(JSON.stringify({ type: 'agent_query', message: msg }));
-              }, REPLY_DELAY);
-            }
+            if (agent.id === currentUser.role) return;
+            if (Math.random() < BOT_REPLY_PROB) tryEnqueueAgentQuery(agent.id, msg);
           });
           break;
 
