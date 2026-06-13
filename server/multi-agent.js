@@ -299,9 +299,11 @@ const server = http.createServer((req, res) => {
         }
 
         msgId++;
+        // 2026-06-13 16:08: 修协议 — agent-bot.js 改发 HTTP POST, 加 fromPrefix 字段
+        // 兜底模型回复时, fromPrefix='傻傻的' 拼在 from 字段前, 让其他 bot 能识别
         const msg = {
           id: msgId,
-          from: agent.name || data.from,
+          from: (data.fromPrefix || '') + (agent.name || data.from),
           fromId: agent.id,
           role: agent.id,
           avatar: agent.avatar,
