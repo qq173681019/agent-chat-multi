@@ -8,8 +8,8 @@ import os
 
 # 修复 Windows 控制台编码
 if sys.platform == 'win32':
-    sys.stdout.reconfigure(encoding='utf-8')
-    sys.stderr.reconfigure(encoding='utf-8')
+    sys.stdout.reconfigure(encoding='utf-8', line_buffering=True)
+    sys.stderr.reconfigure(encoding='utf-8', line_buffering=True)
     os.environ['NO_PROXY'] = '*'
     os.environ['no_proxy'] = '*'
 
@@ -44,7 +44,7 @@ def load_agents():
 
 # 服务器地址：固定走 multi.agent-chat.org（独立仓库，独立隧道）
 # 不再依赖 Vercel 动态地址（Vercel 是老主干 agent-chat 的部署，已废弃）
-SERVER_URL = "https://multi.agent-chat.org"
+SERVER_URL = os.environ.get("CHAT_SERVER_URL", "https://multi.agent-chat.org")
 
 def get_server_url():
     """固定地址: https://multi.agent-chat.org"""
