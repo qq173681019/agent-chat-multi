@@ -36,3 +36,8 @@ cloudflared.exe
 # Cloudflare tunnel runtime
 tunnel-url.txt
 tunnel-log.txt
+
+# Runtime logs
+server.log
+poller_*.log
+.pids.json
