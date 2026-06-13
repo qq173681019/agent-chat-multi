@@ -25,7 +25,7 @@ body { font-family: -apple-system, 'SF Pro Display', 'Segoe UI', sans-serif; bac
 }
 .header-left { display: flex; align-items: center; gap: 12px; }
 .header-title { font-size: 16px; font-weight: 700; letter-spacing: -0.3px; }
-.header-subtitle { font-size: 11px; color: var(--text-dim); margin-top: 1px; }
+.header-subtitle { font-size: 11px; color: var(--text-dim); margin-top: 1px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .agents-strip { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
 .agent-chip {
   display: flex; align-items: center; gap: 3px;
@@ -255,8 +255,9 @@ body { font-family: -apple-system, 'SF Pro Display', 'Segoe UI', sans-serif; bac
 
 /* ===== Connection Status ===== */
 .conn-badge {
-  font-size: 10px; padding: 2px 8px; border-radius: 10px;
-  background: var(--surface2); display: flex; align-items: center; gap: 4px;
+  font-size: 9px; padding: 1px 6px; border-radius: 8px;
+  background: var(--surface2); display: inline-flex; align-items: center; gap: 3px;
+  white-space: nowrap;
 }
 .conn-badge .cdot { width: 5px; height: 5px; border-radius: 50%; }
 .conn-badge.ok .cdot { background: var(--success); }
@@ -274,6 +275,9 @@ body { font-family: -apple-system, 'SF Pro Display', 'Segoe UI', sans-serif; bac
   .msg { max-width: 88%; }
   .agent-chip { font-size: 10px; padding: 2px 6px; }
   .header { padding: 8px 12px; }
+  .icon-btn { width: 32px; height: 32px; font-size: 15px; }
+  .header-actions { gap: 4px; }
+  .header-title { font-size: 14px; }
 }
 </style>
 </head>
@@ -296,12 +300,14 @@ body { font-family: -apple-system, 'SF Pro Display', 'Segoe UI', sans-serif; bac
   <div class="header-left">
     <div>
       <div class="header-title">Multi-Agent Chat</div>
-      <div class="header-subtitle" id="onlineInfo">连接中...</div>
+      <div class="header-subtitle">
+        <span id="onlineInfo">连接中...</span>
+        <span class="conn-badge ok" id="connBadge" title="连接状态"><div class="cdot"></div><span id="connBadgeText">在线</span></span>
+      </div>
     </div>
   </div>
   <div class="agents-strip" id="agentsStrip"></div>
   <div class="header-actions">
-    <div class="conn-badge ok" id="connBadge"><div class="cdot"></div><span>在线</span></div>
     <button class="icon-btn" onclick="toggleSearch()" title="搜索">🔍</button>
     <button class="icon-btn" onclick="clearChat()" title="清空聊天记录 (不保存)">🗑️</button>
     <button class="icon-btn" onclick="toggleSidePanel()" title="存档">📂</button>
@@ -493,7 +499,12 @@ function updateOnlineInfo(agents) {
 function updateConn(status, text) {
   const el = document.getElementById('connBadge');
   el.className = `conn-badge ${status}`;
-  el.innerHTML = `<div class="cdot"></div><span>${text}</span>`;
+  // 2026-06-13: 不要 innerHTML 覆盖 (会丢 .cdot 子节点), 改用 querySelector 找/建子节点
+  let cdot = el.querySelector('.cdot');
+  if (!cdot) cdot = document.createElement('div'), cdot.className = 'cdot', el.insertBefore(cdot, el.firstChild);
+  let label = el.querySelector('span');
+  if (!label) label = document.createElement('span'), el.appendChild(label);
+  label.textContent = text;
 }
 
 // ===== Clear Chat (本地清空, 不保存到服务器) =====
