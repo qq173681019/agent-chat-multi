@@ -303,6 +303,7 @@ body { font-family: -apple-system, 'SF Pro Display', 'Segoe UI', sans-serif; bac
   <div class="header-actions">
     <div class="conn-badge ok" id="connBadge"><div class="cdot"></div><span>在线</span></div>
     <button class="icon-btn" onclick="toggleSearch()" title="搜索">🔍</button>
+    <button class="icon-btn" onclick="clearChat()" title="清空聊天记录 (不保存)">🗑️</button>
     <button class="icon-btn" onclick="toggleSidePanel()" title="存档">📂</button>
   </div>
 </div>
@@ -493,6 +494,15 @@ function updateConn(status, text) {
   const el = document.getElementById('connBadge');
   el.className = `conn-badge ${status}`;
   el.innerHTML = `<div class="cdot"></div><span>${text}</span>`;
+}
+
+// ===== Clear Chat (本地清空, 不保存到服务器) =====
+function clearChat() {
+  if (!confirm('确认清空聊天记录吗?\n(本地聊天界面将清空, 不会保存到服务器)')) return;
+  msgDiv.innerHTML = '';
+  msgCount = 0;
+  addSystemMsg('🗑️ 已清空聊天记录 (不保存到服务器)');
+  scrollToBottom();
 }
 
 // ===== Messages =====
