@@ -25,7 +25,7 @@ if (-not (Test-Path "server\node_modules")) {
 }
 
 # -- 2. Read port --
-$agentsJson = Get-Content "agents.json" -Raw | ConvertFrom-Json
+$agentsJson = Get-Content -Path "agents.json" -Raw -Encoding UTF8 | ConvertFrom-Json
 $Port = if ($agentsJson.serverPort) { $agentsJson.serverPort } else { 3001 }
 Write-Host "  [2/6] Port: $Port" -ForegroundColor Green
 

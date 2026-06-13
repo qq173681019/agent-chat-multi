@@ -7,7 +7,7 @@ Write-Host "  Stopping Agent Chat Multi..." -ForegroundColor Yellow
 
 $Port = 3001
 if (Test-Path "$ProjectDir\agents.json") {
-    $cfg = Get-Content "$ProjectDir\agents.json" -Raw | ConvertFrom-Json
+    $cfg = Get-Content "$ProjectDir\agents.json" -Raw -Encoding UTF8 | ConvertFrom-Json
     if ($cfg.serverPort) { $Port = $cfg.serverPort }
 }
 
