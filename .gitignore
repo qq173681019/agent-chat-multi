@@ -32,6 +32,7 @@ cloudflared.exe
 # Agent poller state files (per-agent)
 .last_id_*
 .poller_*.pid
+.paused
 
 # Cloudflare tunnel runtime
 tunnel-url.txt
