@@ -1,7 +1,8 @@
 const WebSocket = require('ws');
-const { execSync } = require('child_process');
+const { execFile } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { postJson } = require('./lib/post-json');
 
 const configPath = path.join(__dirname, '../config.json');
 const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
@@ -97,10 +98,13 @@ async function askOpenClaw(from, message) {
     stream: false
   });
 
-  const cmd = `curl -s --max-time 60 'http://localhost:${OPENCLAW_PORT}/api/chat' -H 'Content-Type: application/json' -d '${payload.replace(/'/g, "'\\''")}'`;
-  
   try {
-    const result = execSync(cmd, { encoding: 'utf-8', timeout: 65000 });
+    const result = await postJson(
+      `http://localhost:${OPENCLAW_PORT}/api/chat`,
+      { 'Content-Type': 'application/json' },
+      payload,
+      { proxy: null, timeoutMs: 65000 }
+    );
     // 尝试解析回复
     const data = JSON.parse(result);
     if (data.reply || data.message || data.content) {
@@ -118,13 +122,21 @@ async function askOpenClaw(from, message) {
 }
 
 async function spawnReply(from, message) {
-  // 用 openclaw CLI spawn 一个一次性 session
+  // 用 openclaw CLI spawn 一个一次性 session（用数组参数，不走 shell，避免注入）
   const prompt = `你是聊天室里的AI角色"${BOT_NAME}"。${from}对你说: ${message}\n请用简短自然的聊天语气回复（2-3句话），不要markdown，像真人聊天。`;
-  const cmd = `openclaw run --no-stream --message '${prompt.replace(/'/g, "'\\''")}' 2>/dev/null`;
-  
   try {
-    const result = execSync(cmd, { encoding: 'utf-8', timeout: 60000 });
-    return result.trim() || '让我想想... 🤔';
+    const result = await new Promise((resolve, reject) => {
+      execFile(
+        'openclaw',
+        ['run', '--no-stream', '--message', prompt],
+        { encoding: 'utf-8', timeout: 60000, maxBuffer: 10 * 1024 * 1024 },
+        (err, stdout) => {
+          if (err) return reject(err);
+          resolve((stdout || '').trim());
+        }
+      );
+    });
+    return result || '让我想想... 🤔';
   } catch (e) {
     throw new Error('OpenClaw 不可用: ' + e.message);
   }
@@ -137,9 +149,12 @@ async function callAPI(history) {
   const apiKey = config.apiKey || '';
   const apiBase = config.apiBase || 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
   const useProxy = config.useProxy !== false;
-  const proxy = useProxy ? `--proxy ${config.proxy || 'http://127.0.0.1:7897'} ` : '';
-  const cmd = `curl -s --max-time 30 ${proxy}${apiBase} -H "Content-Type: application/json" -H "Authorization: Bearer ${apiKey}" -d '${body.replace(/'/g, "'\\''")}'`;
-  const result = execSync(cmd, { encoding: 'utf-8', timeout: 35000 });
+  const proxy = useProxy ? (config.proxy || 'http://127.0.0.1:7897') : null;
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${apiKey}`,
+  };
+  const result = await postJson(apiBase, headers, body, { proxy, timeoutMs: 35000 });
   const data = JSON.parse(result);
   if (data.choices && data.choices[0]) return data.choices[0].message.content.trim();
   throw new Error('API异常: ' + JSON.stringify(data).substring(0, 100));

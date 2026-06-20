@@ -1,10 +1,10 @@
 const WebSocket = require('ws');
-const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const https = require('https');
 const { URL } = require('url');
+const { postJson } = require('./lib/post-json');
 
 // 支持 env 指定不同 config (用于跑多个 agent 实例)
 const configPath = process.env.AGENT_CONFIG_PATH || path.join(__dirname, '../config.json');
@@ -171,10 +171,12 @@ async function callOpenAI(history, modelName) {
   const apiKey = process.env.LLM_API_KEY || config.apiKey || '';
   const apiBase = config.apiBase || 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
   const useProxy = config.useProxy !== false;
-  const proxy = config.proxy || 'http://127.0.0.1:7897';
-  const proxyArg = useProxy ? `--proxy ${proxy} ` : '';
-  const cmd = `curl -s --max-time 30 ${proxyArg}${apiBase} -H "Content-Type: application/json" -H "Authorization: Bearer ${apiKey}" -d '${body.replace(/'/g, "'\\''")}'`;
-  const result = execSync(cmd, { encoding: 'utf-8', timeout: 35000 });
+  const proxy = useProxy ? (config.proxy || 'http://127.0.0.1:7897') : null;
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${apiKey}`,
+  };
+  const result = await postJson(apiBase, headers, body, { proxy, timeoutMs: 35000 });
   const data = JSON.parse(result);
   if (data.choices && data.choices[0]) return data.choices[0].message.content.trim();
   throw new Error('API异常: ' + JSON.stringify(data).substring(0, 100));
